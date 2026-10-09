@@ -1,0 +1,19 @@
+services:
+  api:
+    build: .
+    env_file: .env
+    environment:
+      API_BIND_HOST: 0.0.0.0
+      DATABASE_URL: postgresql://vakilsetu:local-development-only@postgres:5432/vakilsetu
+      REDIS_URL: redis://redis:6379
+      OBJECT_STORAGE_ENDPOINT: http://minio:9000
+      OBJECT_STORAGE_PUBLIC_ENDPOINT: http://127.0.0.1:9000
+    ports:
+      - "127.0.0.1:8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      minio-init:
+        condition: service_completed_successfully

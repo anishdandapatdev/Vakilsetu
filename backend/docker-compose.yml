@@ -1,0 +1,49 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: vakilsetu
+      POSTGRES_USER: vakilsetu
+      POSTGRES_PASSWORD: local-development-only
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - vakilsetu_postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U vakilsetu"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:8-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - vakilsetu_redis:/data
+
+  minio:
+    image: quay.io/minio/minio:latest
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: vakilsetu-local
+      MINIO_ROOT_PASSWORD: vakilsetu-local-secret-only
+    ports:
+      - "127.0.0.1:9000:9000"
+      - "127.0.0.1:9001:9001"
+    volumes:
+      - vakilsetu_minio:/data
+
+  minio-init:
+    image: quay.io/minio/mc:latest
+    depends_on:
+      - minio
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - "until mc alias set local http://minio:9000 vakilsetu-local vakilsetu-local-secret-only; do sleep 2; done; mc mb --ignore-existing local/vakilsetu-development"
+
+volumes:
+  vakilsetu_postgres:
+  vakilsetu_redis:
+  vakilsetu_minio:
