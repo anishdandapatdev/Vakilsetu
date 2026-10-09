@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import '../design_system/ui.dart';
 import 'demo_store.dart';
 import '../features/home/presentation/dashboard.dart';
-import '../features/conversations/presentation/messages_page.dart';
+import '../features/chats/presentation/messages_page.dart';
 import '../features/directory/presentation/directory_page.dart';
 import '../features/court_channels/presentation/court_rooms_page.dart';
 import '../features/private_groups/presentation/groups_page.dart';
@@ -14,9 +14,9 @@ import '../features/authentication/domain/auth_repository.dart';
 import '../features/authentication/data/api_auth_repository.dart';
 import '../features/directory/data/api_advocates_repository.dart';
 import '../features/court_channels/data/api_court_repository.dart';
-import '../features/conversations/data/api_messaging_repository.dart';
-import '../features/conversations/domain/conversation.dart';
-import '../features/conversations/domain/server_messaging.dart';
+import '../features/chats/data/api_messaging_repository.dart';
+import '../features/chats/domain/conversation.dart';
+import '../features/chats/domain/server_messaging.dart';
 
 class AppShell extends StatefulWidget {
   final DemoStore store;
@@ -114,7 +114,9 @@ class _AppShellState extends State<AppShell> {
   }
 
   Future<void> startAdvocateChat(DemoAdvocate advocate) async {
-    if (messagingRepository is! ConversationCreator) {
+    final isServerAdvocate =
+        RegExp(r'^[0-9a-fA-F-]{36}$').hasMatch(advocate.id);
+    if (!isServerAdvocate || messagingRepository is! ConversationCreator) {
       chat(widget.store.openAdvocate(advocate));
       return;
     }

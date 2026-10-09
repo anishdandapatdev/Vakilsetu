@@ -215,6 +215,7 @@ class _MessagesPageState extends State<MessagesPage> {
     }
   }
 
+
   Future<void> _loadConversations() async {
     setState(() {
       apiLoading = true;
@@ -262,6 +263,18 @@ class _MessagesPageState extends State<MessagesPage> {
       historyError = null;
       historyLoading = false;
       unawaited(_refreshHistory(showLoading: true));
+    }
+    if (old.repository != widget.repository) {
+      syncSubscription?.cancel();
+      if (widget.repository != null) {
+        _loadConversations();
+        widget.repository!.connectRealtime().catchError((_) {});
+        widget.repository!.retryPending().catchError((_) {});
+        syncSubscription = widget.repository!.syncAvailable.listen((_) {
+          _loadConversations();
+          _refreshHistory();
+        });
+      }
     }
   }
 
@@ -532,8 +545,22 @@ class _MessagesPageState extends State<MessagesPage> {
                 children: [
                   for (final f in ['All', 'Unread', 'Groups'])
                     ChoiceChip(
-                      label: Text(f),
+                      label: Text(
+                        f,
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight:
+                              filter == f ? FontWeight.w700 : FontWeight.w600,
+                          color: Colors.black,
+                        ),
+                      ),
                       selected: filter == f,
+                      selectedColor: const Color(0xFFE0F2FE),
+                      backgroundColor: Colors.white,
+                      checkmarkColor: Colors.black,
+                      side: BorderSide(
+                        color: filter == f ? const Color(0xFF38BDF8) : line,
+                      ),
                       onSelected: (_) => setState(() => filter = f),
                     ),
                 ],

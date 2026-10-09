@@ -1,7 +1,7 @@
 import 'dart:typed_data';
 
 import '../core/domain/identity.dart';
-import '../features/conversations/domain/conversation.dart';
+import '../features/chats/domain/conversation.dart';
 
 /// Opaque wire output from a vetted E2EE SDK. No plaintext serialization.
 class EncryptedEnvelope {

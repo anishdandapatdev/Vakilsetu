@@ -78,8 +78,18 @@ ThemeData appTheme() => ThemeData(
   chipTheme: ChipThemeData(
     side: const BorderSide(color: line),
     backgroundColor: Colors.white,
-    selectedColor: paleTeal,
-    labelStyle: const TextStyle(fontSize: 12),
+    selectedColor: const Color(0xFFE0F2FE),
+    labelStyle: const TextStyle(
+      fontSize: 12,
+      fontWeight: FontWeight.w600,
+      color: Colors.black,
+    ),
+    secondaryLabelStyle: const TextStyle(
+      fontSize: 12,
+      fontWeight: FontWeight.w700,
+      color: Colors.black,
+    ),
+    checkmarkColor: Colors.black,
   ),
   listTileTheme: const ListTileThemeData(
     contentPadding: EdgeInsets.symmetric(horizontal: 18, vertical: 7),

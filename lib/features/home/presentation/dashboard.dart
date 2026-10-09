@@ -6,8 +6,8 @@ import 'package:flutter/material.dart';
 
 import '../../../app/demo_store.dart';
 import '../../../design_system/ui.dart';
-import '../../conversations/domain/conversation.dart';
-import '../../conversations/domain/server_messaging.dart';
+import '../../chats/domain/conversation.dart';
+import '../../chats/domain/server_messaging.dart';
 import '../../court_channels/domain/court_repository.dart';
 
 const _ice = Color(0xFFF5FBFC);

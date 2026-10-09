@@ -5,7 +5,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
 import '../../../design_system/ui.dart';
-import '../../conversations/domain/server_messaging.dart';
+import '../../chats/domain/server_messaging.dart';
 
 const sampleDocuments = [
   'Petition_draft.pdf',
@@ -146,8 +146,21 @@ class _DocumentsPageState extends State<DocumentsPage> {
           children: [
             for (final f in ['All', 'PDFs', 'Images'])
               ChoiceChip(
-                label: Text(f),
+                label: Text(
+                  f,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: filter == f ? FontWeight.w700 : FontWeight.w600,
+                    color: Colors.black,
+                  ),
+                ),
                 selected: filter == f,
+                selectedColor: const Color(0xFFE0F2FE),
+                backgroundColor: Colors.white,
+                checkmarkColor: Colors.black,
+                side: BorderSide(
+                  color: filter == f ? const Color(0xFF38BDF8) : line,
+                ),
                 onSelected: (_) {
                   setState(() => filter = f);
                   _filtersChanged(immediate: true);

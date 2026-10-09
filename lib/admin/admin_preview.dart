@@ -57,8 +57,22 @@ class _AdminHomeState extends State<AdminHome> {
             children: [
               for (final f in ['All', 'Pending', 'Verified', 'Suspended'])
                 ChoiceChip(
-                  label: Text(f),
+                  label: Text(
+                    f,
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight:
+                          filter == f ? FontWeight.w700 : FontWeight.w600,
+                      color: Colors.black,
+                    ),
+                  ),
                   selected: filter == f,
+                  selectedColor: const Color(0xFFE0F2FE),
+                  backgroundColor: Colors.white,
+                  checkmarkColor: Colors.black,
+                  side: BorderSide(
+                    color: filter == f ? const Color(0xFF38BDF8) : line,
+                  ),
                   onSelected: (_) => setState(() => filter = f),
                 ),
             ],

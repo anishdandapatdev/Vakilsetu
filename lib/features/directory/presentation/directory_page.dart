@@ -1,9 +1,11 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../../../app/demo_store.dart';
 import '../../../design_system/ui.dart';
+import '../../profile/domain/advocate_profile.dart';
 import '../domain/directory_repository.dart';
 
 class DirectoryPage extends StatefulWidget {
@@ -30,6 +32,7 @@ class _DirectoryPageState extends State<DirectoryPage> {
   String sort = 'Relevance';
   final saved = <String>{'meera'};
   List<DemoAdvocate>? apiResults;
+  Map<String, String> courtIds = const {};
   bool apiLoading = false;
   String? apiError;
   Timer? searchDebounce;
@@ -38,13 +41,40 @@ class _DirectoryPageState extends State<DirectoryPage> {
   void initState() {
     super.initState();
     query = widget.initialQuery;
-    if (widget.repository != null) _loadApi();
+    if (widget.repository != null) {
+      _loadCourtIds();
+      _loadApi();
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant DirectoryPage old) {
+    super.didUpdateWidget(old);
+    if (old.initialQuery != widget.initialQuery) {
+      query = widget.initialQuery;
+      if (widget.repository != null) _loadApi();
+    }
+    if (old.repository != widget.repository) {
+      if (widget.repository != null) {
+        _loadCourtIds();
+        _loadApi();
+      }
+    }
   }
 
   @override
   void dispose() {
     searchDebounce?.cancel();
     super.dispose();
+  }
+
+  Future<void> _loadCourtIds() async {
+    if (widget.repository is ProfileRepository) {
+      try {
+        final map = await (widget.repository! as ProfileRepository).listCourtIdsByName();
+        if (mounted) setState(() => courtIds = map);
+      } catch (_) {}
+    }
   }
 
   void _scheduleApiSearch() {
@@ -58,7 +88,10 @@ class _DirectoryPageState extends State<DirectoryPage> {
       apiError = null;
     });
     try {
-      final page = await widget.repository!.search(query: query);
+      final page = await widget.repository!.search(
+        query: query,
+        courtId: courtIds[court],
+      );
       final mapped = page.items.map((profile) {
         final initials = profile.fullName
             .split(' ')
@@ -85,9 +118,20 @@ class _DirectoryPageState extends State<DirectoryPage> {
 
   @override
   Widget build(BuildContext context) {
+    const preserveDemoData = bool.fromEnvironment(
+      'PRESERVE_DEMO_DATA',
+      defaultValue: !kReleaseMode,
+    );
+    final serverItems = apiResults ?? const <DemoAdvocate>[];
     final source = widget.repository == null
         ? widget.store.advocates
-        : (apiResults ?? const <DemoAdvocate>[]);
+        : [
+            ...serverItems,
+            if (preserveDemoData)
+              ...widget.store.advocates.where(
+                (demo) => !serverItems.any((server) => server.id == demo.id),
+              ),
+          ];
     final results = source
         .where(
           (advocate) =>
@@ -250,7 +294,10 @@ class _DirectoryPageState extends State<DirectoryPage> {
         ),
       ),
     );
-    if (value != null) setState(() => court = value);
+    if (value != null) {
+      setState(() => court = value);
+      if (widget.repository != null) _loadApi();
+    }
   }
 
   Future<void> _showProfile(DemoAdvocate advocate) => showDialog(

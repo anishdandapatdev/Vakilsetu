@@ -227,11 +227,16 @@ class ApiMessagingRepository
     final result = await _request('POST', path, body: body);
     final id = result['conversationId']! as String;
     final summaries = await listConversations();
-    return summaries.firstWhere(
-      (item) => item.id == id,
-      orElse: () => throw const AuthenticationException(
-        'created_conversation_not_returned',
-      ),
+    final match = summaries.where((item) => item.id == id);
+    if (match.isNotEmpty) return match.first;
+    final detail = await conversation(id);
+    return ConversationSummary(
+      id: id,
+      kind: detail.access.kind,
+      title: detail.title ?? 'Private conversation',
+      membershipEpoch: detail.access.membershipEpoch,
+      createdAt: DateTime.now(),
+      unreadCount: 0,
     );
   }
 

@@ -1,8 +1,8 @@
 import 'dart:typed_data';
 
 import '../lib/core/domain/identity.dart';
-import '../lib/features/conversations/domain/conversation.dart';
-import '../lib/features/conversations/application/send_private_message.dart';
+import '../lib/features/chats/domain/conversation.dart';
+import '../lib/features/chats/application/send_private_message.dart';
 import '../lib/features/court_channels/domain/publishing_policy.dart';
 import '../lib/features/profile/domain/advocate_profile.dart';
 import '../lib/security/encryption_provider.dart';

@@ -6,7 +6,7 @@ import '../../../app/demo_store.dart';
 import '../../../design_system/ui.dart';
 import '../../home/presentation/dashboard.dart';
 import '../../directory/domain/directory_repository.dart';
-import '../../conversations/domain/conversation.dart';
+import '../../chats/domain/conversation.dart';
 
 class GroupsPage extends StatefulWidget {
   final DemoStore store;
