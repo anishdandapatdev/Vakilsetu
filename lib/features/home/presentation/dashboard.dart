@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 import 'dart:typed_data';
 
@@ -43,11 +44,36 @@ class _DashboardState extends State<Dashboard> {
   List<CourtChannel>? channels;
   List<SharedAttachment>? documents;
   String? loadError;
+  StreamSubscription<void>? _syncSubscription;
 
   @override
   void initState() {
     super.initState();
     _refresh();
+    _subscribeSync();
+  }
+
+  void _subscribeSync() {
+    _syncSubscription?.cancel();
+    _syncSubscription = widget.messagingRepository?.syncAvailable.listen((_) {
+      if (mounted) _refresh();
+    });
+  }
+
+  @override
+  void didUpdateWidget(covariant Dashboard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.messagingRepository != widget.messagingRepository ||
+        oldWidget.courtRepository != widget.courtRepository) {
+      _subscribeSync();
+      _refresh();
+    }
+  }
+
+  @override
+  void dispose() {
+    _syncSubscription?.cancel();
+    super.dispose();
   }
 
   Future<void> _refresh() async {
@@ -106,14 +132,21 @@ class _DashboardState extends State<Dashboard> {
         final channels = await widget.courtRepository!.listCourts();
         if (mounted) setState(() => this.channels = channels);
         final joined = await widget.courtRepository!.joinedCourtIds();
-        final joinedChannels = channels
+        var targetChannels = channels
             .where(
               (channel) =>
                   joined.contains(channel.id) && channel.channelId != null,
             )
-            .take(4);
+            .take(4)
+            .toList();
+        if (targetChannels.isEmpty) {
+          targetChannels = channels
+              .where((channel) => channel.channelId != null)
+              .take(2)
+              .toList();
+        }
         final updates = <DemoNotice>[];
-        for (final channel in joinedChannels) {
+        for (final channel in targetChannels) {
           final announcements = await widget.courtRepository!.announcements(
             channel.channelId!,
           );
@@ -127,11 +160,15 @@ class _DashboardState extends State<Dashboard> {
             );
           }
         }
-        if (mounted) setState(() => notices = updates);
+        if (mounted) {
+          setState(() {
+            notices = updates.isNotEmpty ? updates : widget.store.notices;
+          });
+        }
       } on Object catch (error) {
         if (mounted) {
           setState(() {
-            notices ??= [];
+            notices ??= widget.store.notices;
             channels ??= [];
             loadError = 'Could not load court updates: $error';
           });
@@ -158,23 +195,36 @@ class _DashboardState extends State<Dashboard> {
   }
 
   @override
-  Widget build(BuildContext context) => LayoutBuilder(
-    builder: (context, constraints) {
-      final compact = constraints.maxWidth < 760;
-      final horizontal = compact ? 16.0 : 30.0;
-      return ColoredBox(
-        color: _ice,
-        child: SafeArea(
-          bottom: false,
-          child: CustomScrollView(
-            slivers: [
-              SliverPersistentHeader(
-                pinned: true,
-                delegate: StickyBrandSearchHeader(
-                  initials: 'AK',
-                  search: _Search(onSearch: widget.onSearch),
-                ),
-              ),
+  Widget build(BuildContext context) {
+    final initials = widget.store.name
+        .split(' ')
+        .where((part) => part.isNotEmpty)
+        .map((part) => part[0].toUpperCase())
+        .take(2)
+        .join();
+    final headerInitials = initials.isEmpty ? 'VS' : initials;
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final compact = constraints.maxWidth < 760;
+        final horizontal = compact ? 16.0 : 30.0;
+        return ColoredBox(
+          color: _ice,
+          child: SafeArea(
+            bottom: false,
+            child: RefreshIndicator(
+              color: _royal,
+              onRefresh: _refresh,
+              child: CustomScrollView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                slivers: [
+                  SliverPersistentHeader(
+                    pinned: true,
+                    delegate: StickyBrandSearchHeader(
+                      initials: headerInitials,
+                      search: _Search(onSearch: widget.onSearch),
+                    ),
+                  ),
               SliverPadding(
                 padding: EdgeInsets.fromLTRB(
                   horizontal,
@@ -330,23 +380,48 @@ class _DashboardState extends State<Dashboard> {
                   ),
                 ),
               ),
-            ],
+                ],
+              ),
+            ),
           ),
-        ),
-      );
-    },
-  );
+        );
+      },
+    );
+  }
 }
 
-class _Search extends StatelessWidget {
+class _Search extends StatefulWidget {
   final ValueChanged<String> onSearch;
   const _Search({required this.onSearch});
 
   @override
+  State<_Search> createState() => _SearchState();
+}
+
+class _SearchState extends State<_Search> {
+  String _query = '';
+
+  void _submit() {
+    final query = _query.trim();
+    if (query.isNotEmpty) {
+      widget.onSearch(query);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) => UniversalSearchCard(
     hint: 'Search advocates, courts, cases…',
-    onChanged: (_) {},
-    onSubmitted: onSearch,
+    onChanged: (val) => setState(() => _query = val),
+    onSubmitted: (val) {
+      _query = val;
+      _submit();
+    },
+    trailing: _query.trim().isNotEmpty
+        ? IconButton(
+            icon: const Icon(Icons.arrow_forward_rounded, color: _aqua, size: 20),
+            onPressed: _submit,
+          )
+        : null,
   );
 }
 
@@ -372,7 +447,7 @@ class _CourtHighlightsState extends State<_CourtHighlights> {
   @override
   Widget build(BuildContext context) => LayoutBuilder(
     builder: (context, c) {
-      final cards = widget.channels == null
+      final cards = (widget.channels == null || widget.channels!.isEmpty)
           ? <_CourtFeature>[
               _CourtFeature(
                 title: 'Delhi High Court',

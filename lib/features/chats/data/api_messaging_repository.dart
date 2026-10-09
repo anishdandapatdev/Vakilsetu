@@ -43,7 +43,7 @@ class ApiMessagingRepository
         conversationTitle: item['conversationTitle']! as String,
         filename: item['filename']! as String,
         contentType: item['contentType']! as String,
-        byteSize: item['byteSize']! as int,
+        byteSize: (item['byteSize'] as num).toInt(),
         createdAt: DateTime.parse(item['createdAt']! as String),
       );
     }).toList();
@@ -69,13 +69,13 @@ class ApiMessagingRepository
             item['senderName'] as String? ?? 'Advocate',
             item['senderAccountId'] == session.userId,
             DateTime.parse(item['createdAt'] as String),
-            item['recipientCount'] as int? ?? 0,
-            item['deliveredCount'] as int? ?? 0,
-            item['readCount'] as int? ?? 0,
+            item['recipientCount'] == null ? 0 : (item['recipientCount'] as num).toInt(),
+            item['deliveredCount'] == null ? 0 : (item['deliveredCount'] as num).toInt(),
+            item['readCount'] == null ? 0 : (item['readCount'] as num).toInt(),
             item['attachmentId'] as String?,
             item['attachmentName'] as String?,
             item['attachmentContentType'] as String?,
-            item['attachmentBytes'] as int?,
+            (item['attachmentBytes'] as num?)?.toInt(),
             item['replyToMessageId'] as String?,
             item['replyBody'] as String?,
             item['replySenderName'] as String?,
@@ -267,13 +267,13 @@ class ApiMessagingRepository
                 ? ConversationKind.privateGroup
                 : ConversationKind.direct,
             title: item['title']! as String,
-            membershipEpoch: item['membershipEpoch']! as int,
+            membershipEpoch: (item['membershipEpoch'] as num?)?.toInt() ?? 1,
             createdAt: DateTime.parse(item['createdAt']! as String),
             lastMessageAt: item['lastMessageAt'] == null
                 ? null
                 : DateTime.parse(item['lastMessageAt']! as String),
             lastMessagePreview: item['lastMessagePreview'] as String?,
-            unreadCount: item['unreadCount'] as int? ?? 0,
+            unreadCount: (item['unreadCount'] as num?)?.toInt() ?? 0,
           ),
         )
         .toList(growable: false);
@@ -310,7 +310,7 @@ class ApiMessagingRepository
             ? ConversationKind.privateGroup
             : ConversationKind.direct,
         memberIds: members.map((member) => member.accountId),
-        membershipEpoch: json['membershipEpoch']! as int,
+        membershipEpoch: (json['membershipEpoch'] as num?)?.toInt() ?? 1,
       ),
       json['title'] as String?,
       members,
@@ -372,7 +372,7 @@ class ApiMessagingRepository
             id: item['id']! as String,
             conversationId: item['conversationId']! as String,
             senderDeviceId: item['senderDeviceId']! as String,
-            membershipEpoch: item['membershipEpoch']! as int,
+            membershipEpoch: (item['membershipEpoch'] as num?)?.toInt() ?? 1,
             protocol: item['protocol']! as String,
             ciphertext: base64Decode(item['ciphertext']! as String),
             createdAt: DateTime.parse(item['createdAt']! as String),
