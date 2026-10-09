@@ -96,10 +96,10 @@ class ApiAdvocatesRepository implements DirectoryRepository, ProfileRepository {
   }
 
   AdvocateProfile _profile(Map<String, Object?> json) => AdvocateProfile(
-    id: json['accountId']! as String,
-    fullName: json['fullName']! as String,
-    enrollmentNumber: json['enrollmentNumber']! as String,
-    primaryCourtId: (json['courtId'] ?? json['primaryCourtId'])! as String,
+    id: (json['accountId'] ?? json['id'] ?? '') as String,
+    fullName: (json['fullName'] ?? 'Advocate') as String,
+    enrollmentNumber: (json['enrollmentNumber'] ?? '') as String,
+    primaryCourtId: (json['courtId'] ?? json['primaryCourtId'] ?? '') as String,
     primaryCourtName: json['primaryCourt'] as String?,
     photoKey: json['photoKey'] as String?,
     verification: switch (json['verificationStatus'] ?? (json['verified'] == true ? 'verified' : 'pending')) {

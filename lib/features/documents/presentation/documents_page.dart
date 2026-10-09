@@ -36,6 +36,14 @@ class _DocumentsPageState extends State<DocumentsPage> {
   }
 
   @override
+  void didUpdateWidget(covariant DocumentsPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.repository != widget.repository && widget.repository != null) {
+      _filtersChanged(immediate: true);
+    }
+  }
+
+  @override
   void dispose() {
     searchDebounce?.cancel();
     super.dispose();

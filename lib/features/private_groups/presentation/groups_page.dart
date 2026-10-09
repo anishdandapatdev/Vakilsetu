@@ -44,6 +44,20 @@ class _GroupsPageState extends State<GroupsPage> {
   }
 
   @override
+  void didUpdateWidget(covariant GroupsPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.messagingRepository != widget.messagingRepository ||
+        oldWidget.directoryRepository != widget.directoryRepository) {
+      syncSubscription?.cancel();
+      syncSubscription = widget.messagingRepository?.syncAvailable.listen((_) {
+        _loadServerGroups();
+      });
+      _loadServerAdvocates();
+      _loadServerGroups();
+    }
+  }
+
+  @override
   void dispose() {
     syncSubscription?.cancel();
     super.dispose();
@@ -132,9 +146,10 @@ class _GroupsPageState extends State<GroupsPage> {
     final initials = widget.store.name
         .split(' ')
         .where((part) => part.isNotEmpty)
-        .map((part) => part[0])
+        .map((part) => part[0].toUpperCase())
         .take(2)
         .join();
+    final headerInitials = initials.isEmpty ? 'VS' : initials;
     final allGroups = widget.messagingRepository == null
         ? widget.store.rooms.where((room) => room.group).toList()
         : (serverGroups ?? const <DemoRoom>[]);
@@ -147,7 +162,7 @@ class _GroupsPageState extends State<GroupsPage> {
         children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(18, 10, 18, 8),
-            child: BrandedTopBar(initials: initials),
+            child: BrandedTopBar(initials: headerInitials),
           ),
           Padding(
             padding: const EdgeInsets.fromLTRB(18, 2, 18, 10),
@@ -159,8 +174,15 @@ class _GroupsPageState extends State<GroupsPage> {
           Expanded(
             child: Stack(
               children: [
-                ListView(
-                  padding: const EdgeInsets.fromLTRB(18, 6, 18, 88),
+                RefreshIndicator(
+                  color: const Color(0xFF0870E4),
+                  onRefresh: () async {
+                    await _loadServerAdvocates();
+                    await _loadServerGroups();
+                  },
+                  child: ListView(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    padding: const EdgeInsets.fromLTRB(18, 6, 18, 88),
                   children: [
                     Text('Your groups', style: heading(16)),
                     const SizedBox(height: 9),
@@ -195,7 +217,8 @@ class _GroupsPageState extends State<GroupsPage> {
                     ],
                   ],
                 ),
-                Positioned(
+              ),
+              Positioned(
                   right: 18,
                   bottom: 18,
                   child: FloatingActionButton(

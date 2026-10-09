@@ -96,7 +96,7 @@ class _DirectoryPageState extends State<DirectoryPage> {
         final initials = profile.fullName
             .split(' ')
             .where((part) => part.isNotEmpty)
-            .map((part) => part[0])
+            .map((part) => part[0].toUpperCase())
             .take(2)
             .join();
         return DemoAdvocate(
@@ -105,7 +105,7 @@ class _DirectoryPageState extends State<DirectoryPage> {
           profile.primaryCourtName ?? 'Court not provided',
           profile.enrollmentNumber,
           'Legal professional',
-          initials,
+          initials.isEmpty ? 'VS' : initials,
         );
       }).toList();
       if (mounted) setState(() => apiResults = mapped);
@@ -150,35 +150,48 @@ class _DirectoryPageState extends State<DirectoryPage> {
     final initials = widget.store.name
         .split(' ')
         .where((part) => part.isNotEmpty)
-        .map((part) => part[0])
+        .map((part) => part[0].toUpperCase())
         .take(2)
         .join();
+    final headerInitials = initials.isEmpty ? 'VS' : initials;
 
     return ColoredBox(
       color: canvas,
       child: SafeArea(
         bottom: false,
-        child: CustomScrollView(
-          slivers: [
-            SliverPersistentHeader(
-              pinned: true,
-              delegate: StickyBrandSearchHeader(
-                initials: initials,
-                search: UniversalSearchCard(
-                  initialValue: query,
-                  hint: 'Search name, enrollment or specialisation',
-                  onChanged: (value) {
-                    setState(() => query = value);
-                    if (widget.repository != null) _scheduleApiSearch();
-                  },
-                  trailing: IconButton(
-                    tooltip: 'Filter advocates',
-                    onPressed: _showCourtFilter,
-                    icon: const Icon(Icons.tune_rounded, color: navy),
+        child: RefreshIndicator(
+          color: const Color(0xFF0870E4),
+          onRefresh: () async {
+            await _loadCourtIds();
+            await _loadApi();
+          },
+          child: CustomScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            slivers: [
+              SliverPersistentHeader(
+                pinned: true,
+                delegate: StickyBrandSearchHeader(
+                  initials: headerInitials,
+                  search: UniversalSearchCard(
+                    initialValue: query,
+                    hint: 'Search name, enrollment or specialisation',
+                    onChanged: (value) {
+                      setState(() => query = value);
+                      if (widget.repository != null) _scheduleApiSearch();
+                    },
+                    onSubmitted: (value) {
+                      searchDebounce?.cancel();
+                      setState(() => query = value);
+                      if (widget.repository != null) _loadApi();
+                    },
+                    trailing: IconButton(
+                      tooltip: 'Filter advocates',
+                      onPressed: _showCourtFilter,
+                      icon: const Icon(Icons.tune_rounded, color: navy),
+                    ),
                   ),
                 ),
               ),
-            ),
             SliverPadding(
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 26),
               sliver: SliverList.list(
@@ -268,10 +281,14 @@ class _DirectoryPageState extends State<DirectoryPage> {
           ],
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 
   Future<void> _showCourtFilter() async {
+    final availableCourts = courtIds.isNotEmpty
+        ? ['All courts', ...courtIds.keys]
+        : ['All courts', ...courts];
     final value = await showModalBottomSheet<String>(
       context: context,
       showDragHandle: true,
@@ -282,7 +299,7 @@ class _DirectoryPageState extends State<DirectoryPage> {
           children: [
             Text('Filter by court', style: heading(19)),
             const SizedBox(height: 8),
-            for (final item in ['All courts', ...courts])
+            for (final item in availableCourts)
               ListTile(
                 title: Text(item),
                 trailing: item == court

@@ -40,6 +40,14 @@ class _CourtRoomsPageState extends State<CourtRoomsPage> {
     if (widget.repository != null) _loadCourts();
   }
 
+  @override
+  void didUpdateWidget(covariant CourtRoomsPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.repository != widget.repository && widget.repository != null) {
+      _loadCourts();
+    }
+  }
+
   Future<void> _loadCourts() async {
     setState(() {
       loading = true;
@@ -135,20 +143,27 @@ class _CourtRoomsPageState extends State<CourtRoomsPage> {
     final initials = widget.store.name
         .split(' ')
         .where((part) => part.isNotEmpty)
-        .map((part) => part[0])
+        .map((part) => part[0].toUpperCase())
         .take(2)
         .join();
+    final headerInitials = initials.isEmpty ? 'VS' : initials;
 
     return ColoredBox(
       color: canvas,
       child: SafeArea(
         bottom: false,
-        child: CustomScrollView(
-          slivers: [
-            SliverPersistentHeader(
-              pinned: true,
-              delegate: StickyBrandSearchHeader(
-                initials: initials,
+        child: RefreshIndicator(
+          color: const Color(0xFF0870E4),
+          onRefresh: () async {
+            if (widget.repository != null) await _loadCourts();
+          },
+          child: CustomScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            slivers: [
+              SliverPersistentHeader(
+                pinned: true,
+                delegate: StickyBrandSearchHeader(
+                  initials: headerInitials,
                 search: UniversalSearchCard(
                   hint: 'Search court channels',
                   onChanged: (value) => setState(() => query = value),
@@ -205,8 +220,9 @@ class _CourtRoomsPageState extends State<CourtRoomsPage> {
           ],
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 
   Widget _channelDetails() {
     final court = selected!;

@@ -30,7 +30,7 @@ export class AdvocatesService {
               p.enrollment_number AS "enrollmentNumber", p.primary_court_id AS "primaryCourtId",
               c.name AS "primaryCourt", a.status AS "verificationStatus", p.photo_object_key AS "photoKey"
        FROM advocate_profiles p JOIN accounts a ON a.id = p.account_id
-       JOIN courts c ON c.id = p.primary_court_id WHERE p.account_id = $1`,
+       LEFT JOIN courts c ON c.id = p.primary_court_id WHERE p.account_id = $1`,
       [identity.accountId],
     );
     return result.rows[0] ?? null;
@@ -43,7 +43,7 @@ export class AdvocatesService {
               p.enrollment_number AS "enrollmentNumber", c.id AS "courtId",
               c.name AS "primaryCourt", p.photo_object_key AS "photoKey", true AS verified
        FROM advocate_profiles p JOIN accounts a ON a.id = p.account_id
-       JOIN courts c ON c.id = p.primary_court_id
+       LEFT JOIN courts c ON c.id = p.primary_court_id
        WHERE a.status = 'verified' AND ($1::uuid IS NULL OR c.id = $1)
          AND ($2::text IS NULL OR p.full_name ILIKE '%' || $2 || '%'
               OR p.enrollment_number ILIKE '%' || $2 || '%')
