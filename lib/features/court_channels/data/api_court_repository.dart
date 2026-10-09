@@ -21,7 +21,7 @@ class ApiCourtRepository implements CourtRepository {
         id: item['id']! as String,
         channelId: item['channelId'] as String?,
         name: item['name']! as String,
-        city: item['city']! as String,
+        city: (item['city'] ?? 'New Delhi') as String,
         imageKey: item['imageKey'] as String?,
       ),
     ).toList(growable: false);
@@ -53,7 +53,7 @@ class ApiCourtRepository implements CourtRepository {
         id: item['id']! as String,
         body: item['body']! as String,
         attachmentKey: item['attachmentKey'] as String?,
-        revision: item['revision']! as int,
+        revision: (item['revision'] as num?)?.toInt() ?? 1,
         createdAt: DateTime.parse(item['createdAt']! as String),
       ),
     ).toList(growable: false);
