@@ -50,7 +50,8 @@ class _MessagesPageState extends State<MessagesPage> {
   bool get serverRoom =>
       widget.repository is ServerMessaging &&
       active != null &&
-      RegExp(r'^[0-9a-fA-F-]{36}$').hasMatch(active!.id);
+      (RegExp(r'^[0-9a-fA-F-]{36}$').hasMatch(active!.id) ||
+          !RegExp(r'^[1-5]$').hasMatch(active!.id));
 
   Future<void> _refreshHistory({bool showLoading = false}) async {
     if (!serverRoom) return;
@@ -190,7 +191,8 @@ class _MessagesPageState extends State<MessagesPage> {
       historyLoading =
           room != null &&
           widget.repository is ServerMessaging &&
-          RegExp(r'^[0-9a-fA-F-]{36}$').hasMatch(room.id);
+          (RegExp(r'^[0-9a-fA-F-]{36}$').hasMatch(room.id) ||
+              !RegExp(r'^[1-5]$').hasMatch(room.id));
     });
     if (room != null) unawaited(_refreshHistory(showLoading: true));
   }

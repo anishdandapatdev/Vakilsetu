@@ -223,6 +223,7 @@ class _DashboardState extends State<Dashboard> {
                     delegate: StickyBrandSearchHeader(
                       initials: headerInitials,
                       search: _Search(onSearch: widget.onSearch),
+                      onAvatarTap: () => widget.onNavigate(6),
                     ),
                   ),
               SliverPadding(
