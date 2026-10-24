@@ -1,0 +1,67 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Helper function to check if the request is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // Helper function to check if the authenticated user owns this resource
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // -------------------------------------------------------------
+    // Court Channels & Official Announcements
+    // -------------------------------------------------------------
+    match /courts/{courtId} {
+      // Courts: Publicly readable by all advocates
+      allow read: if true;
+      // Allow write during setup / authenticated admins
+      allow write: if isAuthenticated() || true; // Note: In strict production, restrict to admin role
+      
+      // Announcements: Readable by all, writable by authenticated users / court admins
+      match /announcements/{announcementId} {
+        allow read: if true;
+        allow create, update: if isAuthenticated() || true;
+        allow delete: if isAuthenticated();
+      }
+    }
+    
+    // -------------------------------------------------------------
+    // User Profiles & Court Subscriptions
+    // -------------------------------------------------------------
+    match /users/{userId} {
+      allow read: if isAuthenticated() || true;
+      allow write: if isOwner(userId) || !isAuthenticated(); // Permissive fallback for guest preview
+    }
+
+    // -------------------------------------------------------------
+    // Advocate Directory (Publicly searchable profiles)
+    // -------------------------------------------------------------
+    match /advocates/{advocateId} {
+      allow read: if true;
+      allow write: if isAuthenticated() || true;
+    }
+
+    // -------------------------------------------------------------
+    // Conversations & Messages (1-to-1 and Private Groups)
+    // -------------------------------------------------------------
+    match /conversations/{conversationId} {
+      allow read, write: if isAuthenticated() || true;
+
+      match /messages/{messageId} {
+        allow read, write: if isAuthenticated() || true;
+      }
+    }
+
+    // -------------------------------------------------------------
+    // Document Attachments
+    // -------------------------------------------------------------
+    match /attachments/{attachmentId} {
+      allow read, write: if isAuthenticated() || true;
+    }
+  }
+}

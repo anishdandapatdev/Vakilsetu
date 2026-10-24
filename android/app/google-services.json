@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "877065720354",
+    "project_id": "vakilsetu-3fda2",
+    "storage_bucket": "vakilsetu-3fda2.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:877065720354:android:8285bf682039967815b07b",
+        "android_client_info": {
+          "package_name": "com.vakilsetu"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBTjEwxbBYopjYnz9jtEmc6sDmj8WUltD4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
