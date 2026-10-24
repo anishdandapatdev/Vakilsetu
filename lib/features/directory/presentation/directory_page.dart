@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import '../../../app/demo_store.dart';
 import '../../../design_system/ui.dart';
 import '../../profile/domain/advocate_profile.dart';
+import '../data/firestore_advocates_repository.dart';
 import '../domain/directory_repository.dart';
 
 class DirectoryPage extends StatefulWidget {
@@ -13,6 +14,7 @@ class DirectoryPage extends StatefulWidget {
   final Future<void> Function(DemoAdvocate) onMessage;
   final String initialQuery;
   final DirectoryRepository? repository;
+  final VoidCallback? onProfile;
 
   const DirectoryPage({
     super.key,
@@ -20,6 +22,7 @@ class DirectoryPage extends StatefulWidget {
     required this.onMessage,
     this.initialQuery = '',
     this.repository,
+    this.onProfile,
   });
 
   @override
@@ -36,29 +39,27 @@ class _DirectoryPageState extends State<DirectoryPage> {
   bool apiLoading = false;
   String? apiError;
   Timer? searchDebounce;
+  late DirectoryRepository _repo;
 
   @override
   void initState() {
     super.initState();
     query = widget.initialQuery;
-    if (widget.repository != null) {
-      _loadCourtIds();
-      _loadApi();
-    }
+    _repo = widget.repository ?? FirestoreAdvocatesRepository();
+    _loadCourtIds();
+    _loadApi();
   }
 
   @override
   void didUpdateWidget(covariant DirectoryPage old) {
     super.didUpdateWidget(old);
-    if (old.initialQuery != widget.initialQuery) {
-      query = widget.initialQuery;
-      if (widget.repository != null) _loadApi();
-    }
     if (old.repository != widget.repository) {
-      if (widget.repository != null) {
-        _loadCourtIds();
-        _loadApi();
-      }
+      _repo = widget.repository ?? FirestoreAdvocatesRepository();
+      _loadCourtIds();
+      _loadApi();
+    } else if (old.initialQuery != widget.initialQuery) {
+      query = widget.initialQuery;
+      _loadApi();
     }
   }
 
@@ -69,9 +70,9 @@ class _DirectoryPageState extends State<DirectoryPage> {
   }
 
   Future<void> _loadCourtIds() async {
-    if (widget.repository is ProfileRepository) {
+    if (_repo is ProfileRepository) {
       try {
-        final map = await (widget.repository! as ProfileRepository).listCourtIdsByName();
+        final map = await (_repo as ProfileRepository).listCourtIdsByName();
         if (mounted) setState(() => courtIds = map);
       } catch (_) {}
     }
@@ -88,7 +89,7 @@ class _DirectoryPageState extends State<DirectoryPage> {
       apiError = null;
     });
     try {
-      final page = await widget.repository!.search(
+      final page = await _repo.search(
         query: query,
         courtId: courtIds[court],
       );
@@ -104,7 +105,7 @@ class _DirectoryPageState extends State<DirectoryPage> {
           profile.fullName,
           profile.primaryCourtName ?? 'Court not provided',
           profile.enrollmentNumber,
-          'Legal professional',
+          profile.practiceAreas ?? 'Civil litigation · Commercial',
           initials.isEmpty ? 'VS' : initials,
         );
       }).toList();
@@ -172,17 +173,18 @@ class _DirectoryPageState extends State<DirectoryPage> {
                 pinned: true,
                 delegate: StickyBrandSearchHeader(
                   initials: headerInitials,
+                  onAvatarTap: widget.onProfile,
                   search: UniversalSearchCard(
                     initialValue: query,
                     hint: 'Search name, enrollment or specialisation',
                     onChanged: (value) {
                       setState(() => query = value);
-                      if (widget.repository != null) _scheduleApiSearch();
+                      _scheduleApiSearch();
                     },
                     onSubmitted: (value) {
                       searchDebounce?.cancel();
                       setState(() => query = value);
-                      if (widget.repository != null) _loadApi();
+                      _loadApi();
                     },
                     trailing: IconButton(
                       tooltip: 'Filter advocates',
@@ -313,7 +315,7 @@ class _DirectoryPageState extends State<DirectoryPage> {
     );
     if (value != null) {
       setState(() => court = value);
-      if (widget.repository != null) _loadApi();
+      _loadApi();
     }
   }
 
