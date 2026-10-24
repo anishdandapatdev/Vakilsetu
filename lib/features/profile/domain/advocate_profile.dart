@@ -8,6 +8,11 @@ class AdvocateProfile {
   final String? primaryCourtName;
   final String? photoKey;
   final VerificationStatus verification;
+  final String? practiceAreas;
+  final int? experienceYears;
+  final String? bio;
+  final String? email;
+
   const AdvocateProfile({
     required this.id,
     required this.fullName,
@@ -16,7 +21,12 @@ class AdvocateProfile {
     this.primaryCourtName,
     this.photoKey,
     required this.verification,
+    this.practiceAreas,
+    this.experienceYears,
+    this.bio,
+    this.email,
   });
+
   bool get showVerifiedBadge => verification == VerificationStatus.verified;
 }
 
@@ -32,9 +42,14 @@ class ProfileUpdate {
   final String fullName;
   final String enrollmentNumber;
   final String primaryCourtId;
+  final String? practiceAreas;
+  final String? bio;
+
   const ProfileUpdate({
     required this.fullName,
     required this.enrollmentNumber,
     required this.primaryCourtId,
+    this.practiceAreas,
+    this.bio,
   });
 }
