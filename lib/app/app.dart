@@ -1,3 +1,4 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../design_system/ui.dart';
@@ -5,6 +6,7 @@ import '../core/config/api_config.dart';
 import 'app_shell.dart';
 import 'demo_store.dart';
 import '../features/authentication/data/api_auth_repository.dart';
+import '../features/authentication/data/firebase_auth_repository.dart';
 import '../features/authentication/presentation/login_page.dart';
 
 class VakilSetuApp extends StatelessWidget {
@@ -14,8 +16,36 @@ class VakilSetuApp extends StatelessWidget {
     title: 'VakilSetu · Advocate network',
     debugShowCheckedModeBanner: false,
     theme: appTheme(),
-    home: ApiConfig.enabled ? const _AuthenticationGate() : const LoginPage(),
+    home: ApiConfig.enabled
+        ? const _AuthenticationGate()
+        : const _FirebaseAuthenticationGate(),
   );
+}
+
+class _FirebaseAuthenticationGate extends StatelessWidget {
+  const _FirebaseAuthenticationGate();
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<User?>(
+      stream: FirebaseAuth.instance.authStateChanges(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Scaffold(
+            body: Center(child: CircularProgressIndicator()),
+          );
+        }
+        final user = snapshot.data;
+        if (user != null) {
+          return AppShell(
+            store: DemoStore(),
+            authRepository: FirebaseAuthRepository(),
+          );
+        }
+        return LoginPage(authRepository: FirebaseAuthRepository());
+      },
+    );
+  }
 }
 
 class _AuthenticationGate extends StatefulWidget {

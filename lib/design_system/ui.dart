@@ -153,6 +153,22 @@ class IllustratedIcon extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (name == 'verified' || name == 'profile') {
+      return Container(
+        width: size,
+        height: size,
+        decoration: const BoxDecoration(
+          color: Color(0xFFE0F2FE),
+          shape: BoxShape.circle,
+        ),
+        alignment: Alignment.center,
+        child: Icon(
+          Icons.person_rounded,
+          size: size * 0.65,
+          color: const Color(0xFF0870E4),
+        ),
+      );
+    }
     final asset = _assets[name];
     if (asset == null) return LegalIcon(name, size: size);
     return Semantics(
@@ -252,27 +268,51 @@ class BrandedSectionHeader extends StatelessWidget {
 
 class BrandedTopBar extends StatelessWidget {
   final String initials;
-  const BrandedTopBar({super.key, required this.initials});
+  final VoidCallback? onAvatarTap;
+  final VoidCallback? onMenuTap;
+  const BrandedTopBar({
+    super.key,
+    required this.initials,
+    this.onAvatarTap,
+    this.onMenuTap,
+  });
 
   @override
   Widget build(BuildContext context) => Row(
     children: [
+      if (onMenuTap != null) ...[
+        IconButton(
+          onPressed: onMenuTap,
+          icon: const Icon(Icons.menu_rounded, color: navy, size: 24),
+          tooltip: 'Open menu',
+          padding: EdgeInsets.zero,
+          constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+        ),
+        const SizedBox(width: 8),
+      ],
       const VakilSetuLogo(height: 42),
       const Spacer(),
-      Stack(
-        alignment: Alignment.bottomRight,
-        children: [
-          Avatar(initials, size: 42),
-          Container(
-            width: 13,
-            height: 13,
-            decoration: BoxDecoration(
-              color: teal,
-              shape: BoxShape.circle,
-              border: Border.all(color: Colors.white, width: 2),
-            ),
+      Tooltip(
+        message: 'Advocate Profile',
+        child: InkWell(
+          onTap: onAvatarTap,
+          borderRadius: BorderRadius.circular(22),
+          child: Stack(
+            alignment: Alignment.bottomRight,
+            children: [
+              Avatar(initials, size: 42),
+              Container(
+                width: 13,
+                height: 13,
+                decoration: BoxDecoration(
+                  color: teal,
+                  shape: BoxShape.circle,
+                  border: Border.all(color: Colors.white, width: 2),
+                ),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     ],
   );
@@ -374,12 +414,19 @@ class CompactSearchBox extends UniversalSearchCard {
 class StickyBrandSearchHeader extends SliverPersistentHeaderDelegate {
   final String initials;
   final Widget search;
-  const StickyBrandSearchHeader({required this.initials, required this.search});
+  final VoidCallback? onAvatarTap;
+  final VoidCallback? onMenuTap;
+  const StickyBrandSearchHeader({
+    required this.initials,
+    required this.search,
+    this.onAvatarTap,
+    this.onMenuTap,
+  });
 
   @override
-  double get minExtent => 124;
+  double get minExtent => 132;
   @override
-  double get maxExtent => 124;
+  double get maxExtent => 132;
 
   @override
   Widget build(
@@ -388,11 +435,17 @@ class StickyBrandSearchHeader extends SliverPersistentHeaderDelegate {
     bool overlapsContent,
   ) => Container(
     color: canvas,
-    padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
+    padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
     child: Column(
+      mainAxisSize: MainAxisSize.min,
+      mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        BrandedTopBar(initials: initials),
-        const SizedBox(height: 10),
+        BrandedTopBar(
+          initials: initials,
+          onAvatarTap: onAvatarTap,
+          onMenuTap: onMenuTap,
+        ),
+        const SizedBox(height: 8),
         search,
       ],
     ),
@@ -400,7 +453,10 @@ class StickyBrandSearchHeader extends SliverPersistentHeaderDelegate {
 
   @override
   bool shouldRebuild(covariant StickyBrandSearchHeader oldDelegate) =>
-      oldDelegate.initials != initials || oldDelegate.search != search;
+      oldDelegate.initials != initials ||
+      oldDelegate.search != search ||
+      oldDelegate.onAvatarTap != onAvatarTap ||
+      oldDelegate.onMenuTap != onMenuTap;
 }
 
 class Surface extends StatelessWidget {

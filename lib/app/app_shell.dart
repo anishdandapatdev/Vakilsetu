@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 import '../design_system/ui.dart';
 import 'demo_store.dart';
@@ -9,12 +10,15 @@ import '../features/court_channels/presentation/court_rooms_page.dart';
 import '../features/private_groups/presentation/groups_page.dart';
 import '../features/documents/presentation/documents_page.dart';
 import '../features/profile/presentation/profile_page.dart';
+import '../features/profile/data/firebase_profile_repository.dart';
 import '../features/authentication/presentation/login_page.dart';
 import '../features/authentication/domain/auth_repository.dart';
 import '../features/authentication/data/api_auth_repository.dart';
-import '../features/directory/data/api_advocates_repository.dart';
-import '../features/court_channels/data/api_court_repository.dart';
+import '../features/authentication/data/firebase_auth_repository.dart';
+import '../features/directory/data/firestore_advocates_repository.dart';
+import '../features/court_channels/data/firestore_court_repository.dart';
 import '../features/chats/data/api_messaging_repository.dart';
+import '../features/chats/data/firestore_messaging_repository.dart';
 import '../features/chats/domain/conversation.dart';
 import '../features/chats/domain/server_messaging.dart';
 
@@ -66,6 +70,8 @@ class _AppShellState extends State<AppShell> {
       messagingRepository = ApiMessagingRepository(
         widget.authRepository! as ApiAuthRepository,
       );
+    } else {
+      messagingRepository = FirestoreMessagingRepository();
     }
   }
 
@@ -114,19 +120,18 @@ class _AppShellState extends State<AppShell> {
   }
 
   Future<void> startAdvocateChat(DemoAdvocate advocate) async {
-    final isServerAdvocate =
-        RegExp(r'^[0-9a-fA-F-]{36}$').hasMatch(advocate.id);
-    if (!isServerAdvocate || messagingRepository is! ConversationCreator) {
-      chat(widget.store.openAdvocate(advocate));
-      return;
+    if (messagingRepository is ConversationCreator) {
+      try {
+        final summary = await (messagingRepository! as ConversationCreator)
+            .createDirect(advocate.id);
+        if (mounted) chat(_roomFromSummary(summary));
+        return;
+      } on Object catch (error) {
+        if (mounted) toast(context, 'Could not start conversation: $error');
+        return;
+      }
     }
-    try {
-      final summary = await (messagingRepository! as ConversationCreator)
-          .createDirect(advocate.id);
-      if (mounted) chat(_roomFromSummary(summary));
-    } on Object catch (error) {
-      if (mounted) toast(context, 'Could not start conversation: $error');
-    }
+    chat(widget.store.openAdvocate(advocate));
   }
 
   Future<DemoRoom?> createServerGroup(
@@ -147,12 +152,18 @@ class _AppShellState extends State<AppShell> {
   }
 
   Future<void> signOut() async {
+    try {
+      await FirebaseAuth.instance.signOut();
+    } catch (_) {}
     await widget.authRepository?.signOut();
     if (!mounted) return;
-    Navigator.of(context).pushReplacement(
+    Navigator.of(context).pushAndRemoveUntil(
       MaterialPageRoute(
-        builder: (_) => LoginPage(authRepository: widget.authRepository),
+        builder: (_) => LoginPage(
+          authRepository: widget.authRepository ?? FirebaseAuthRepository(),
+        ),
       ),
+      (route) => false,
     );
   }
 
@@ -162,12 +173,8 @@ class _AppShellState extends State<AppShell> {
     builder: (context, _) {
       final wide = MediaQuery.sizeOf(context).width >= 980;
       final store = widget.store;
-      final advocatesRepository = widget.authRepository is ApiAuthRepository
-          ? ApiAdvocatesRepository(widget.authRepository! as ApiAuthRepository)
-          : null;
-      final courtRepository = widget.authRepository is ApiAuthRepository
-          ? ApiCourtRepository(widget.authRepository! as ApiAuthRepository)
-          : null;
+      final advocatesRepository = FirestoreAdvocatesRepository();
+      final courtRepository = FirestoreCourtRepository();
       final pages = [
         Dashboard(
           store: store,
@@ -194,8 +201,13 @@ class _AppShellState extends State<AppShell> {
           repository: advocatesRepository,
           onMessage: startAdvocateChat,
           initialQuery: directoryQuery,
+          onProfile: () => go(6),
         ),
-        CourtRoomsPage(store: store, repository: courtRepository),
+        CourtRoomsPage(
+          store: store,
+          repository: courtRepository,
+          onProfile: () => go(6),
+        ),
         GroupsPage(
           store: store,
           onOpen: chat,
@@ -212,8 +224,10 @@ class _AppShellState extends State<AppShell> {
         ),
         ProfilePage(
           store: store,
-          repository: advocatesRepository,
+          repository: FirebaseProfileRepository(),
           onSaved: () => go(0),
+          onBack: () => go(0),
+          onSignOut: signOut,
         ),
         SettingsPage(store: store, onProfile: () => go(6), onSignOut: signOut),
       ];
@@ -311,6 +325,25 @@ class _AppShellState extends State<AppShell> {
             ),
             title: const Text('Settings', style: TextStyle(fontSize: 13)),
           ),
+          ListTile(
+            onTap: () {
+              if (!wide) Navigator.pop(context);
+              signOut();
+            },
+            leading: const Icon(
+              Icons.logout_rounded,
+              color: Color(0xFFE53935),
+              size: 22,
+            ),
+            title: const Text(
+              'Sign Out / Log Out',
+              style: TextStyle(
+                fontSize: 13,
+                color: Color(0xFFE53935),
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
           const Padding(
             padding: EdgeInsets.only(bottom: 16),
             child: Tag('LOCAL UI PREVIEW'),
@@ -318,7 +351,7 @@ class _AppShellState extends State<AppShell> {
         ],
       );
       return Scaffold(
-        appBar: wide || selected <= 4
+        appBar: wide || selected == 6 || selected == 7 || (selected <= 4 && selected != 1)
             ? null
             : AppBar(
                 title: const Brand(small: true),
@@ -327,6 +360,11 @@ class _AppShellState extends State<AppShell> {
                     tooltip: 'Your profile',
                     onPressed: () => go(6),
                     icon: const Icon(Icons.account_circle_outlined),
+                  ),
+                  IconButton(
+                    tooltip: 'Sign Out / Log Out',
+                    onPressed: signOut,
+                    icon: const Icon(Icons.logout_rounded, color: Color(0xFFE53935)),
                   ),
                 ],
               ),
