@@ -1,14 +1,23 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../../app/demo_store.dart';
 import '../../../design_system/ui.dart';
 import '../../documents/presentation/documents_page.dart';
+import '../data/firestore_court_repository.dart';
 import '../domain/court_repository.dart';
 
 class CourtRoomsPage extends StatefulWidget {
   final DemoStore store;
   final CourtRepository? repository;
-  const CourtRoomsPage({super.key, required this.store, this.repository});
+  final VoidCallback? onProfile;
+  const CourtRoomsPage({
+    super.key,
+    required this.store,
+    this.repository,
+    this.onProfile,
+  });
 
   @override
   State<CourtRoomsPage> createState() => _CourtRoomsPageState();
@@ -23,6 +32,9 @@ class _CourtRoomsPageState extends State<CourtRoomsPage> {
   List<CourtAnnouncement>? apiNotices;
   bool loading = false;
   String? error;
+
+  late CourtRepository _repo;
+  StreamSubscription<List<CourtAnnouncement>>? _announcementsSub;
 
   static const _courtPhotos = {
     'Delhi High Court': 'assets/images/courts/delhi_high_court_list.png',
@@ -60,15 +72,23 @@ class _CourtRoomsPageState extends State<CourtRoomsPage> {
   @override
   void initState() {
     super.initState();
-    if (widget.repository != null) _loadCourts();
+    _repo = widget.repository ?? FirestoreCourtRepository();
+    _loadCourts();
   }
 
   @override
   void didUpdateWidget(covariant CourtRoomsPage oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.repository != widget.repository && widget.repository != null) {
+    if (oldWidget.repository != widget.repository) {
+      _repo = widget.repository ?? FirestoreCourtRepository();
       _loadCourts();
     }
+  }
+
+  @override
+  void dispose() {
+    _announcementsSub?.cancel();
+    super.dispose();
   }
 
   Future<void> _loadCourts() async {
@@ -78,8 +98,8 @@ class _CourtRoomsPageState extends State<CourtRoomsPage> {
     });
     try {
       final values = await Future.wait([
-        widget.repository!.listCourts(),
-        widget.repository!.joinedCourtIds(),
+        _repo.listCourts(),
+        _repo.joinedCourtIds(),
       ]);
       if (!mounted) return;
       setState(() {
@@ -94,9 +114,6 @@ class _CourtRoomsPageState extends State<CourtRoomsPage> {
   }
 
   bool _isJoined(CourtChannel channel) {
-    if (widget.repository == null) {
-      return widget.store.joined.contains(channel.name);
-    }
     return apiJoined.contains(channel.id) ||
         widget.store.joined.contains(channel.name);
   }
@@ -114,12 +131,8 @@ class _CourtRoomsPageState extends State<CourtRoomsPage> {
       }
     });
 
-    if (widget.repository == null) return;
-    final isUuid = RegExp(r'^[0-9a-fA-F-]{36}$').hasMatch(channel.id);
-    if (!isUuid) return;
-
     try {
-      await widget.repository!.setJoined(channel.id, next);
+      await _repo.setJoined(channel.id, next);
     } on Object catch (exception) {
       if (!mounted) return;
       setState(() {
@@ -136,22 +149,167 @@ class _CourtRoomsPageState extends State<CourtRoomsPage> {
   }
 
   Future<void> _openCourt(CourtChannel channel) async {
+    _announcementsSub?.cancel();
     setState(() {
       selectedChannel = channel;
       apiNotices = null;
       error = null;
     });
-    if (channel.channelId == null || widget.repository == null) return;
+    final channelId = channel.channelId ?? channel.id;
+    if (channelId.isEmpty) return;
+
+    final stream = _repo.streamAnnouncements(channelId);
+    if (stream != null) {
+      _announcementsSub = stream.listen((notices) {
+        if (mounted) {
+          setState(() {
+            apiNotices = notices;
+            loading = false;
+          });
+        }
+      }, onError: (err) {
+        if (mounted) {
+          setState(() {
+            error = err.toString();
+            loading = false;
+          });
+        }
+      });
+    }
+
     setState(() => loading = true);
     try {
-      final notices = await widget.repository!.announcements(
-        channel.channelId!,
-      );
-      if (mounted) setState(() => apiNotices = notices);
+      final notices = await _repo.announcements(channelId);
+      if (mounted && apiNotices == null) {
+        setState(() => apiNotices = notices);
+      }
     } on Object catch (exception) {
-      if (mounted) setState(() => error = exception.toString());
+      if (mounted && apiNotices == null) {
+        setState(() => error = exception.toString());
+      }
     } finally {
       if (mounted) setState(() => loading = false);
+    }
+  }
+
+  Future<void> _openAddNoticeDialog(CourtChannel channel) async {
+    final titleController = TextEditingController();
+    final bodyController = TextEditingController();
+    bool attachFile = true;
+
+    final posted = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setModalState) => Container(
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+          ),
+          padding: EdgeInsets.fromLTRB(
+            20,
+            20,
+            20,
+            MediaQuery.of(ctx).viewInsets.bottom + 24,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Post Court Announcement', style: heading(18)),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Publish to ${channel.name} · Cloud Firestore',
+                          style: const TextStyle(color: slateBlue, fontSize: 12),
+                        ),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close_rounded),
+                    onPressed: () => Navigator.pop(ctx, false),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 18),
+              TextField(
+                controller: titleController,
+                decoration: InputDecoration(
+                  labelText: 'Notice Title *',
+                  hintText: 'e.g., Daily Cause List - Court No. 1',
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 14),
+              TextField(
+                controller: bodyController,
+                maxLines: 4,
+                decoration: InputDecoration(
+                  labelText: 'Announcement Body *',
+                  hintText: 'Official updates, hearing instructions, or registry notices...',
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 10),
+              CheckboxListTile(
+                contentPadding: EdgeInsets.zero,
+                value: attachFile,
+                onChanged: (val) => setModalState(() => attachFile = val ?? false),
+                title: const Text('Attach verified Cause_list.pdf', style: TextStyle(fontSize: 13)),
+                controlAffinity: ListTileControlAffinity.leading,
+              ),
+              const SizedBox(height: 16),
+              FilledButton.icon(
+                style: FilledButton.styleFrom(
+                  backgroundColor: const Color(0xFF0870E4),
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                onPressed: () {
+                  if (titleController.text.trim().isEmpty ||
+                      bodyController.text.trim().isEmpty) {
+                    toast(ctx, 'Please enter title and announcement details.');
+                    return;
+                  }
+                  Navigator.pop(ctx, true);
+                },
+                icon: const Icon(Icons.send_rounded, size: 18),
+                label: const Text('Publish to Firestore'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    if (posted == true) {
+      try {
+        await _repo.postAnnouncement(
+          channelId: channel.channelId ?? channel.id,
+          title: titleController.text.trim(),
+          body: bodyController.text.trim(),
+          attachmentKey: attachFile ? 'Cause_list.pdf' : null,
+        );
+        if (mounted) {
+          toast(context, 'Announcement published to Firestore!');
+          await _openCourt(channel);
+        }
+      } catch (e) {
+        if (mounted) toast(context, 'Could not post announcement: $e');
+      }
     }
   }
 
@@ -164,8 +322,8 @@ class _CourtRoomsPageState extends State<CourtRoomsPage> {
         : courts
             .map(
               (name) => CourtChannel(
-                id: name,
-                channelId: null,
+                id: name.toLowerCase().replaceAll(' ', '_'),
+                channelId: name.toLowerCase().replaceAll(' ', '_'),
                 name: name,
                 city: 'New Delhi',
               ),
@@ -196,7 +354,7 @@ class _CourtRoomsPageState extends State<CourtRoomsPage> {
         child: RefreshIndicator(
           color: const Color(0xFF0870E4),
           onRefresh: () async {
-            if (widget.repository != null) await _loadCourts();
+            await _loadCourts();
           },
           child: CustomScrollView(
             physics: const AlwaysScrollableScrollPhysics(),
@@ -205,6 +363,7 @@ class _CourtRoomsPageState extends State<CourtRoomsPage> {
                 pinned: true,
                 delegate: StickyBrandSearchHeader(
                   initials: headerInitials,
+                  onAvatarTap: widget.onProfile,
                   search: UniversalSearchCard(
                     hint: 'Search court channels',
                     onChanged: (value) => setState(() => query = value),
@@ -271,9 +430,8 @@ class _CourtRoomsPageState extends State<CourtRoomsPage> {
         .toList();
     final notices = <DemoNotice>[
       for (final notice in apiNotices ?? const <CourtAnnouncement>[])
-        DemoNotice(channel.name, 'Official court update', notice.body),
-      if (widget.repository == null ||
-          (apiNotices != null && apiNotices!.isEmpty))
+        DemoNotice(channel.name, notice.title ?? 'Official court update', notice.body),
+      if (apiNotices == null || apiNotices!.isEmpty)
         ...localNotices,
     ];
 
@@ -284,7 +442,8 @@ class _CourtRoomsPageState extends State<CourtRoomsPage> {
         child: RefreshIndicator(
           color: const Color(0xFF0870E4),
           onRefresh: () async {
-            if (channel.channelId != null && widget.repository != null) {
+            final channelId = channel.channelId ?? channel.id;
+            if (channelId.isNotEmpty) {
               await _openCourt(channel);
             }
           },
@@ -300,7 +459,10 @@ class _CourtRoomsPageState extends State<CourtRoomsPage> {
                         alignment: Alignment.centerLeft,
                         padding: EdgeInsets.zero,
                       ),
-                      onPressed: () => setState(() => selectedChannel = null),
+                      onPressed: () {
+                        _announcementsSub?.cancel();
+                        setState(() => selectedChannel = null);
+                      },
                       icon: const Icon(Icons.arrow_back_rounded, size: 18),
                       label: const Text('All court channels'),
                     ),
@@ -351,8 +513,14 @@ class _CourtRoomsPageState extends State<CourtRoomsPage> {
                     const SizedBox(height: 14),
                     Row(
                       children: [
-                        const Tag('Read only', color: slateBlue),
+                        const Tag('Official Channel', color: slateBlue),
                         const Spacer(),
+                        OutlinedButton.icon(
+                          onPressed: () => _openAddNoticeDialog(channel),
+                          icon: const Icon(Icons.add_comment_outlined, size: 16),
+                          label: const Text('Post Notice'),
+                        ),
+                        const SizedBox(width: 8),
                         OutlinedButton.icon(
                           onPressed: () => _toggleJoined(channel),
                           icon: Icon(
@@ -393,7 +561,7 @@ class _CourtRoomsPageState extends State<CourtRoomsPage> {
                             Text(notice.body),
                             if (notice.title.contains('Cause List') ||
                                 notice.body.contains('.pdf') ||
-                                widget.repository == null) ...[
+                                notice.body.contains('cause list')) ...[
                               const SizedBox(height: 16),
                               const DocumentTile(
                                 name: 'Cause_list.pdf',
@@ -417,7 +585,7 @@ class _CourtRoomsPageState extends State<CourtRoomsPage> {
                           SizedBox(width: 10),
                           Expanded(
                             child: Text(
-                              'Only court admins can post. Members can read verified updates.',
+                              'Court registry and verified advocates can post updates. Members receive real-time notifications.',
                               style: TextStyle(color: muted, fontSize: 12),
                             ),
                           ),
@@ -488,7 +656,7 @@ class _CourtChannelCard extends StatelessWidget {
                 style: const TextStyle(color: slateBlue, fontSize: 9.5),
               ),
               const SizedBox(height: 6),
-              const Tag('🔒  Read only', color: slateBlue),
+              const Tag('🔒  Official', color: slateBlue),
               if (!compact) ...[const Spacer(), _actionRow()],
             ],
           ),

@@ -59,6 +59,17 @@ class ApiCourtRepository implements CourtRepository {
     ).toList(growable: false);
   }
 
+  @override
+  Stream<List<CourtAnnouncement>>? streamAnnouncements(String channelId) => null;
+
+  @override
+  Future<void> postAnnouncement({
+    required String channelId,
+    required String title,
+    required String body,
+    String? attachmentKey,
+  }) async {}
+
   Future<Map<String, Object?>> _request(
     String method,
     Uri uri, {
