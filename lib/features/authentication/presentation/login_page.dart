@@ -8,7 +8,9 @@ import '../../../app/demo_store.dart';
 import '../../../core/config/api_config.dart';
 import '../../../design_system/ui.dart';
 import '../data/api_auth_repository.dart';
+import '../data/firebase_auth_repository.dart';
 import '../../directory/data/api_advocates_repository.dart';
+import '../../profile/data/firebase_profile_repository.dart';
 import '../../profile/domain/advocate_profile.dart';
 import '../domain/auth_repository.dart';
 
@@ -32,7 +34,7 @@ class _LoginPageState extends State<LoginPage> {
 
   int step = 0;
   int seconds = 30;
-  bool emailMode = false;
+  bool emailMode = true;
   bool hidden = true;
   String selectedCourt = courts[1];
   Timer? timer;
@@ -43,7 +45,7 @@ class _LoginPageState extends State<LoginPage> {
   @override
   void initState() {
     super.initState();
-    repository = widget.authRepository ?? (ApiConfig.enabled ? ApiAuthRepository() : null);
+    repository = widget.authRepository ?? (ApiConfig.enabled ? ApiAuthRepository() : FirebaseAuthRepository());
     otp.addListener(_refreshOtp);
   }
 
@@ -101,58 +103,67 @@ class _LoginPageState extends State<LoginPage> {
     );
   }
 
-  void _enterApp() => _openShell(repository);
+  void _enterApp() => _openShell(repository ?? FirebaseAuthRepository());
 
-  void _enterDemo() => _openShell(null);
+  void _enterDemo() => _openShell(repository ?? FirebaseAuthRepository());
 
   Future<void> _continueLogin() async {
     if (!(form.currentState?.validate() ?? false)) return;
     if (emailMode) {
-      if (repository == null) {
-        setState(() => step = 3);
-      } else {
-        toast(context, 'Email sign-in is not available on the backend yet.');
-      }
-    } else {
-      if (repository == null) {
-        setState(() => step = 2);
-        _startCountdown();
+      if (email.text.trim().isEmpty || password.text.trim().isEmpty) {
+        toast(context, 'Please enter email and password.');
         return;
       }
       await _runAuthAction(() async {
-        challengeId = await repository!.requestOtp('+91${phone.text}');
+        final authRepo = repository ?? FirebaseAuthRepository();
+        await authRepo.signInWithEmail(email.text.trim(), password.text.trim());
         if (!mounted) return;
+        toast(context, 'Signed in with Firebase!');
+        _enterApp();
+      });
+    } else {
+      if (repository is ApiAuthRepository) {
+        await _runAuthAction(() async {
+          challengeId = await repository!.requestOtp('+91${phone.text}');
+          if (!mounted) return;
+          setState(() => step = 2);
+          _startCountdown();
+        });
+      } else {
         setState(() => step = 2);
         _startCountdown();
-      });
+      }
     }
   }
 
   Future<void> _verifyOtp() async {
-    if (repository == null && otp.text != '123456') {
-      toast(context, 'Use preview code 123456. No SMS is sent.');
-      return;
-    }
-    if (repository == null) {
-      setState(() => step = 3);
-      return;
-    }
-    if (challengeId == null || otp.text.length != 6) {
-      toast(context, 'Enter the complete 6-digit OTP.');
-      return;
-    }
-    await _runAuthAction(() async {
-      await repository!.verifyOtp(challengeId!, otp.text);
-      final profile = await ApiAdvocatesRepository(
-        repository! as ApiAuthRepository,
-      ).getMine();
-      if (!mounted) return;
-      if (profile == null) {
-        setState(() => step = 3);
-      } else {
-        _enterApp();
+    if (repository is ApiAuthRepository) {
+      if (challengeId == null || otp.text.length != 6) {
+        toast(context, 'Enter the complete 6-digit OTP.');
+        return;
       }
-    });
+      await _runAuthAction(() async {
+        await repository!.verifyOtp(challengeId!, otp.text);
+        final profile = await ApiAdvocatesRepository(
+          repository! as ApiAuthRepository,
+        ).getMine();
+        if (!mounted) return;
+        if (profile == null) {
+          setState(() => step = 3);
+        } else {
+          _enterApp();
+        }
+      });
+    } else {
+      await _runAuthAction(() async {
+        final authRepo = repository ?? FirebaseAuthRepository();
+        if (authRepo is FirebaseAuthRepository) {
+          await authRepo.signInAnonymously();
+        }
+        if (!mounted) return;
+        _enterApp();
+      });
+    }
   }
 
   Future<void> _runAuthAction(Future<void> Function() action) async {
@@ -169,18 +180,11 @@ class _LoginPageState extends State<LoginPage> {
 
   Future<void> _submitProfile() async {
     if (!(form.currentState?.validate() ?? false)) return;
-    if (repository is! ApiAuthRepository) {
-      setState(() => step = 4);
-      return;
-    }
     await _runAuthAction(() async {
-      final profiles = ApiAdvocatesRepository(repository! as ApiAuthRepository);
-      final courtIds = await profiles.listCourtIdsByName();
-      final courtId = courtIds[selectedCourt];
-      if (courtId == null) {
-        throw const AuthenticationException('selected_court_not_available');
-      }
-      await profiles.save(ProfileUpdate(
+      final firestoreRepo = FirebaseProfileRepository();
+      final courtIds = await firestoreRepo.listCourtIdsByName();
+      final courtId = courtIds[selectedCourt] ?? 'delhi_high_court';
+      await firestoreRepo.save(ProfileUpdate(
         fullName: fullName.text.trim(),
         enrollmentNumber: enrollment.text.trim(),
         primaryCourtId: courtId,
@@ -367,12 +371,14 @@ class _LoginPageState extends State<LoginPage> {
             ),
           ),
           validator: (value) =>
-              (value ?? '').length >= 8 ? null : 'Use at least 8 characters.',
+              (value ?? '').length >= 6 ? null : 'Use at least 6 characters.',
         ),
       ],
       const SizedBox(height: 24),
       _PrimaryButton(
-        label: loading ? 'Please wait…' : (emailMode ? 'Continue' : 'Send OTP'),
+        label: loading
+            ? 'Please wait…'
+            : (emailMode ? 'Sign In / Register with Email' : 'Send OTP'),
         onPressed: loading ? null : _continueLogin,
       ),
       const SizedBox(height: 14),
@@ -392,11 +398,14 @@ class _LoginPageState extends State<LoginPage> {
         icon: Icon(
           emailMode ? Icons.phone_android_rounded : Icons.mail_outline,
         ),
-        label: Text(emailMode ? 'Continue with Mobile' : 'Continue with Email'),
+        label: Text(emailMode ? 'Switch to Mobile Number' : 'Switch to Email & Password'),
       ),
-      const SizedBox(height: 8),
-      if (repository == null)
-        TextButton(onPressed: _enterDemo, child: const Text('Explore the demo')),
+      const SizedBox(height: 12),
+      TextButton.icon(
+        onPressed: _enterDemo,
+        icon: const Icon(Icons.explore_outlined, size: 18),
+        label: const Text('Continue as Guest / Explore Demo'),
+      ),
       const SizedBox(height: 20),
       const _CommunityCard(),
     ],
