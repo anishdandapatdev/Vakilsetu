@@ -506,9 +506,9 @@ class _MessagesPageState extends State<MessagesPage> {
   Widget build(BuildContext context) {
     final wide = MediaQuery.sizeOf(context).width >= 1150;
     final rooms =
-        (widget.repository == null
-                ? widget.store.rooms
-                : (apiRooms ?? const <DemoRoom>[]))
+        ((apiRooms != null && apiRooms!.isNotEmpty)
+                ? apiRooms!
+                : widget.store.rooms)
             .where(
               (r) =>
                   r.name.toLowerCase().contains(query.toLowerCase()) &&

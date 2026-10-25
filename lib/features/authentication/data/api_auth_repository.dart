@@ -1,8 +1,10 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
 
 import 'package:http/http.dart' as http;
 import 'package:flutter/foundation.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 import '../../../core/config/api_config.dart';
 import '../../../core/domain/identity.dart';
@@ -127,6 +129,16 @@ class ApiAuthRepository implements AuthRepository {
     }
   }
 
+  Future<void> _ensureFirebaseSession() async {
+    try {
+      if (FirebaseAuth.instance.currentUser == null) {
+        await FirebaseAuth.instance.signInAnonymously();
+      }
+    } catch (e) {
+      debugPrint('Firebase anonymous auth note: $e');
+    }
+  }
+
   Future<SessionIdentity> _saveSessionFromResponse(
     Map<String, Object?> response,
   ) async {
@@ -140,6 +152,7 @@ class ApiAuthRepository implements AuthRepository {
       deviceStatus: (response['deviceStatus'] as String?) ?? 'trusted',
     );
     await _sessions.write(session);
+    unawaited(_ensureFirebaseSession());
     return _identity(session);
   }
 
@@ -152,6 +165,7 @@ class ApiAuthRepository implements AuthRepository {
     )) {
       session = await _refresh(session);
     }
+    unawaited(_ensureFirebaseSession());
     return _identity(session);
   }
 

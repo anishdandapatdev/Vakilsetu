@@ -150,9 +150,9 @@ class _GroupsPageState extends State<GroupsPage> {
         .take(2)
         .join();
     final headerInitials = initials.isEmpty ? 'VS' : initials;
-    final allGroups = widget.messagingRepository == null
-        ? widget.store.rooms.where((room) => room.group).toList()
-        : (serverGroups ?? const <DemoRoom>[]);
+    final allGroups = (serverGroups != null && serverGroups!.isNotEmpty)
+        ? serverGroups!
+        : widget.store.rooms.where((room) => room.group).toList();
     final groups = allGroups
         .where((room) => room.name.toLowerCase().contains(query.toLowerCase()))
         .toList();

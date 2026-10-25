@@ -198,7 +198,7 @@ class _DocumentsPageState extends State<DocumentsPage> {
                   'Try a different name or file type.',
                 ),
               for (final d
-                  in widget.repository == null ? docs : const <String>[]) ...[
+                  in (widget.repository == null || (shared.isEmpty && !loading)) ? docs : const <String>[]) ...[
                 DocumentTile(
                   name: d,
                   detail: d.endsWith('.pdf')

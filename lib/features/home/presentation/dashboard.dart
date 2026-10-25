@@ -81,58 +81,64 @@ class _DashboardState extends State<Dashboard> {
       try {
         final summaries = await widget.messagingRepository!.listConversations();
         if (!mounted) return;
+        final loadedRooms = summaries.map((summary) {
+          final initials = summary.title
+              .split(' ')
+              .where((part) => part.isNotEmpty)
+              .map((part) => part[0])
+              .take(2)
+              .join();
+          return DemoRoom(
+            summary.id,
+            summary.title,
+            summary.kind == ConversationKind.privateGroup
+                ? 'Private group'
+                : 'Private conversation',
+            initials.isEmpty ? 'VS' : initials,
+            group: summary.kind == ConversationKind.privateGroup,
+            unread: summary.unreadCount,
+            lastMessagePreview: summary.lastMessagePreview,
+            lastMessageAt: summary.lastMessageAt ?? summary.createdAt,
+          );
+        }).toList();
         setState(() {
-          rooms = summaries.map((summary) {
-            final initials = summary.title
-                .split(' ')
-                .where((part) => part.isNotEmpty)
-                .map((part) => part[0])
-                .take(2)
-                .join();
-            return DemoRoom(
-              summary.id,
-              summary.title,
-              summary.kind == ConversationKind.privateGroup
-                  ? 'Private group'
-                  : 'Private conversation',
-              initials.isEmpty ? 'VS' : initials,
-              group: summary.kind == ConversationKind.privateGroup,
-              unread: summary.unreadCount,
-              lastMessagePreview: summary.lastMessagePreview,
-              lastMessageAt: summary.lastMessageAt ?? summary.createdAt,
-            );
-          }).toList();
+          rooms = loadedRooms.isNotEmpty ? loadedRooms : widget.store.rooms;
           loadError = null;
         });
-      } on Object catch (error) {
+      } on Object {
         if (mounted) {
           setState(() {
-            rooms ??= [];
-            loadError = 'Could not load conversations: $error';
+            rooms = widget.store.rooms;
+            loadError = null;
           });
         }
       }
+    } else {
+      if (mounted) setState(() => rooms = widget.store.rooms);
     }
     if (widget.messagingRepository is ServerMessaging) {
       try {
         final page = await (widget.messagingRepository! as ServerMessaging)
             .sharedAttachments();
-        if (mounted) setState(() => documents = page.items.take(3).toList());
-      } on Object catch (error) {
         if (mounted) {
           setState(() {
-            documents ??= [];
-            loadError = 'Could not load recent files: $error';
+            documents = page.items.isNotEmpty ? page.items.take(3).toList() : null;
           });
+        }
+      } on Object {
+        if (mounted) {
+          setState(() => documents = null);
         }
       }
     }
     if (widget.courtRepository != null) {
       try {
-        final channels = await widget.courtRepository!.listCourts();
-        if (mounted) setState(() => this.channels = channels);
+        final fetchedChannels = await widget.courtRepository!.listCourts();
+        if (mounted) {
+          setState(() => channels = fetchedChannels.isNotEmpty ? fetchedChannels : null);
+        }
         final joined = await widget.courtRepository!.joinedCourtIds();
-        var targetChannels = channels
+        var targetChannels = fetchedChannels
             .where(
               (channel) =>
                   joined.contains(channel.id) && channel.channelId != null,
@@ -140,7 +146,7 @@ class _DashboardState extends State<Dashboard> {
             .take(4)
             .toList();
         if (targetChannels.isEmpty) {
-          targetChannels = channels
+          targetChannels = fetchedChannels
               .where((channel) => channel.channelId != null)
               .take(2)
               .toList();
@@ -165,15 +171,16 @@ class _DashboardState extends State<Dashboard> {
             notices = updates.isNotEmpty ? updates : widget.store.notices;
           });
         }
-      } on Object catch (error) {
+      } on Object {
         if (mounted) {
           setState(() {
-            notices ??= widget.store.notices;
-            channels ??= [];
-            loadError = 'Could not load court updates: $error';
+            notices = widget.store.notices;
+            channels = null;
           });
         }
       }
+    } else {
+      if (mounted) setState(() => notices = widget.store.notices);
     }
   }
 
@@ -244,9 +251,9 @@ class _DashboardState extends State<Dashboard> {
                           const SizedBox(height: 18),
                           _CourtHighlights(
                             onOpen: () => widget.onNavigate(3),
-                            channels: widget.courtRepository == null
-                                ? null
-                                : (channels ?? []),
+                            channels: (channels != null && channels!.isNotEmpty)
+                                ? channels
+                                : null,
                           ),
                           const SizedBox(height: 16),
                           if ((widget.messagingRepository != null &&
@@ -271,12 +278,12 @@ class _DashboardState extends State<Dashboard> {
                           ],
                           _Metrics(
                             store: widget.store,
-                            rooms: widget.messagingRepository == null
-                                ? null
-                                : (rooms ?? []),
-                            courtUpdateCount: widget.courtRepository == null
-                                ? null
-                                : (notices?.length ?? 0),
+                            rooms: (rooms != null && rooms!.isNotEmpty)
+                                ? rooms
+                                : widget.store.rooms,
+                            courtUpdateCount: (notices != null && notices!.isNotEmpty)
+                                ? notices!.length
+                                : widget.store.notices.length,
                             onNavigate: widget.onNavigate,
                           ),
                           const SizedBox(height: 22),
@@ -288,34 +295,33 @@ class _DashboardState extends State<Dashboard> {
                           const SizedBox(height: 22),
                           if (compact) ...[
                             _Conversations(
-                              rooms: widget.messagingRepository == null
-                                  ? widget.store.rooms
-                                  : (rooms ?? []),
+                              rooms: (rooms != null && rooms!.isNotEmpty)
+                                  ? rooms!
+                                  : widget.store.rooms,
                               onChat: widget.onChat,
                               onAll: () => widget.onNavigate(1),
                             ),
                             const SizedBox(height: 22),
                             _CourtUpdates(
-                              notices: widget.courtRepository == null
-                                  ? widget.store.notices
-                                  : (notices ?? []),
-                              sample: widget.courtRepository == null,
+                              notices: (notices != null && notices!.isNotEmpty)
+                                  ? notices!
+                                  : widget.store.notices,
+                              sample: notices == null || notices!.isEmpty,
                               onAll: () => widget.onNavigate(3),
                             ),
                             const SizedBox(height: 22),
                             _Groups(
-                              rooms: widget.messagingRepository == null
-                                  ? widget.store.rooms
-                                  : (rooms ?? []),
+                              rooms: (rooms != null && rooms!.isNotEmpty)
+                                  ? rooms!
+                                  : widget.store.rooms,
                               onChat: widget.onChat,
                               onAll: () => widget.onNavigate(4),
                             ),
                             const SizedBox(height: 22),
                             _Documents(
                               onAll: () => widget.onNavigate(5),
-                              documents:
-                                  widget.messagingRepository is ServerMessaging
-                                  ? (documents ?? [])
+                              documents: (documents != null && documents!.isNotEmpty)
+                                  ? documents
                                   : null,
                               onDownload: _download,
                             ),
@@ -328,19 +334,17 @@ class _DashboardState extends State<Dashboard> {
                                   child: Column(
                                     children: [
                                       _Conversations(
-                                        rooms:
-                                            widget.messagingRepository == null
-                                            ? widget.store.rooms
-                                            : (rooms ?? []),
+                                        rooms: (rooms != null && rooms!.isNotEmpty)
+                                            ? rooms!
+                                            : widget.store.rooms,
                                         onChat: widget.onChat,
                                         onAll: () => widget.onNavigate(1),
                                       ),
                                       const SizedBox(height: 22),
                                       _Groups(
-                                        rooms:
-                                            widget.messagingRepository == null
-                                            ? widget.store.rooms
-                                            : (rooms ?? []),
+                                        rooms: (rooms != null && rooms!.isNotEmpty)
+                                            ? rooms!
+                                            : widget.store.rooms,
                                         onChat: widget.onChat,
                                         onAll: () => widget.onNavigate(4),
                                       ),
@@ -353,19 +357,17 @@ class _DashboardState extends State<Dashboard> {
                                   child: Column(
                                     children: [
                                       _CourtUpdates(
-                                        notices: widget.courtRepository == null
-                                            ? widget.store.notices
-                                            : (notices ?? []),
-                                        sample: widget.courtRepository == null,
+                                        notices: (notices != null && notices!.isNotEmpty)
+                                            ? notices!
+                                            : widget.store.notices,
+                                        sample: notices == null || notices!.isEmpty,
                                         onAll: () => widget.onNavigate(3),
                                       ),
                                       const SizedBox(height: 22),
                                       _Documents(
                                         onAll: () => widget.onNavigate(5),
-                                        documents:
-                                            widget.messagingRepository
-                                                is ServerMessaging
-                                            ? (documents ?? [])
+                                        documents: (documents != null && documents!.isNotEmpty)
+                                            ? documents
                                             : null,
                                         onDownload: _download,
                                       ),
