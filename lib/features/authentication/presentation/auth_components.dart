@@ -63,14 +63,12 @@ class _SoftCircle extends StatelessWidget {
 /// or as the initial welcome screen on mobile.
 class AuthWelcomePanel extends StatelessWidget {
   final VoidCallback? onStart;
-  final VoidCallback? onDemo;
   final VoidCallback? onSignUp;
   final bool embedded;
 
   const AuthWelcomePanel({
     super.key,
     this.onStart,
-    this.onDemo,
     this.onSignUp,
     this.embedded = false,
   });
@@ -162,17 +160,10 @@ class AuthWelcomePanel extends StatelessWidget {
           ),
         ],
         if (onSignUp != null) ...[
-          const SizedBox(height: 10),
+          const SizedBox(height: 12),
           OutlinedButton(
             onPressed: onSignUp,
             child: const Text('Create New Advocate Account'),
-          ),
-        ],
-        if (onDemo != null) ...[
-          const SizedBox(height: 8),
-          TextButton(
-            onPressed: onDemo,
-            child: const Text('Continue as Guest / Explore Demo'),
           ),
         ],
       ],
@@ -258,7 +249,7 @@ class AuthTitle extends StatelessWidget {
   );
 }
 
-/// Tab selector for switching auth modes (Mobile OTP vs Email & Password).
+/// Tab selector for switching auth modes.
 class AuthMethodTab extends StatelessWidget {
   final String label;
   final bool selected;
@@ -368,6 +359,131 @@ class AuthPrimaryButton extends StatelessWidget {
   );
 }
 
+/// Google Sign-In button with authentic Google 4-color 'G' icon.
+class GoogleSignInButton extends StatelessWidget {
+  final VoidCallback? onPressed;
+  final bool loading;
+  final String label;
+
+  const GoogleSignInButton({
+    super.key,
+    required this.onPressed,
+    this.loading = false,
+    this.label = 'Continue with Google',
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return OutlinedButton(
+      onPressed: loading ? null : onPressed,
+      style: OutlinedButton.styleFrom(
+        backgroundColor: Colors.white,
+        foregroundColor: ink,
+        side: const BorderSide(color: line, width: 1.2),
+        padding: const EdgeInsets.symmetric(vertical: 15, horizontal: 16),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        elevation: 0,
+      ),
+      child: loading
+          ? const SizedBox(
+              height: 20,
+              width: 20,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: Color(0xFF4285F4),
+              ),
+            )
+          : Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const _GoogleGLogo(size: 20),
+                const SizedBox(width: 12),
+                Text(
+                  label,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: ink,
+                  ),
+                ),
+              ],
+            ),
+    );
+  }
+}
+
+/// Authentic 4-color Google G icon drawn with vector paths.
+class _GoogleGLogo extends StatelessWidget {
+  final double size;
+  const _GoogleGLogo({this.size = 20});
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: size,
+      height: size,
+      child: CustomPaint(
+        size: Size(size, size),
+        painter: _GoogleGLogoPainter(),
+      ),
+    );
+  }
+}
+
+class _GoogleGLogoPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final w = size.width;
+    final h = size.height;
+    final center = Offset(w / 2, h / 2);
+    final radius = w / 2;
+    final strokeWidth = w * 0.22;
+
+    final paint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = strokeWidth
+      ..strokeCap = StrokeCap.butt;
+
+    final rect = Rect.fromCircle(
+      center: center,
+      radius: radius - strokeWidth / 2,
+    );
+
+    // Red (top)
+    paint.color = const Color(0xFFEA4335);
+    canvas.drawArc(rect, -2.6, 1.4, false, paint);
+
+    // Yellow (left)
+    paint.color = const Color(0xFFFBBC05);
+    canvas.drawArc(rect, -1.2, 1.4, false, paint);
+
+    // Green (bottom)
+    paint.color = const Color(0xFF34A853);
+    canvas.drawArc(rect, 0.2, 1.4, false, paint);
+
+    // Blue (right arc)
+    paint.color = const Color(0xFF4285F4);
+    canvas.drawArc(rect, 1.6, 1.0, false, paint);
+
+    // Blue (crossbar)
+    final barPaint = Paint()
+      ..color = const Color(0xFF4285F4)
+      ..style = PaintingStyle.fill;
+    canvas.drawRect(
+      Rect.fromLTWH(
+        center.dx - strokeWidth / 4,
+        center.dy - strokeWidth / 2,
+        radius,
+        strokeWidth,
+      ),
+      barPaint,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
 /// Consistent styled label for text inputs.
 class AuthFieldLabel extends StatelessWidget {
   final String text;
@@ -415,10 +531,7 @@ class AuthCommunityCard extends StatelessWidget {
 }
 
 /// Shows help modal sheet.
-void showAuthHelpDialog(
-  BuildContext context, {
-  VoidCallback? onDemo,
-}) {
+void showAuthHelpDialog(BuildContext context) {
   showModalBottomSheet(
     context: context,
     backgroundColor: Colors.white,
@@ -475,17 +588,6 @@ void showAuthHelpDialog(
             subtitle: const Text('+91 11 2345 6789 (Mon-Sat, 9AM-7PM)'),
             onTap: () => Navigator.pop(ctx),
           ),
-          if (onDemo != null) ...[
-            const SizedBox(height: 10),
-            OutlinedButton.icon(
-              onPressed: () {
-                Navigator.pop(ctx);
-                onDemo();
-              },
-              icon: const Icon(Icons.explore_outlined),
-              label: const Text('Explore in Demo Mode'),
-            ),
-          ],
         ],
       ),
     ),

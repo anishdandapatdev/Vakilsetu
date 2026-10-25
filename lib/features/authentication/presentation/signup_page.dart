@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../../app/demo_store.dart';
-import '../../../core/config/api_config.dart';
 import '../../../design_system/ui.dart';
 import '../../profile/data/firebase_profile_repository.dart';
 import '../../profile/domain/advocate_profile.dart';
@@ -28,36 +27,30 @@ class _SignUpPageState extends State<SignUpPage> {
   final _profileFormKey = GlobalKey<FormState>();
 
   final _fullName = TextEditingController();
-  final _email = TextEditingController();
   final _phone = TextEditingController();
-  final _password = TextEditingController();
-  final _confirmPassword = TextEditingController();
   final _enrollment = TextEditingController();
   final _practiceAreas = TextEditingController(text: 'Civil Litigation · Corporate Law');
   final _otp = TextEditingController();
   final _otpFocus = FocusNode();
 
   // Steps:
-  // 0: Account Details (Email or Mobile)
-  // 1: Phone OTP Verification (only if mobile mode)
+  // 0: Account Details (Phone or Google)
+  // 1: Phone OTP Verification
   // 2: Advocate Bar Profile Setup
   // 3: Submitted / Verification Confirmation
   int _step = 0;
-  bool _emailMode = true;
-  bool _hidePassword = true;
-  bool _hideConfirmPassword = true;
   bool _loading = false;
+  bool _googleLoading = false;
   int _seconds = 30;
   Timer? _timer;
   String _selectedCourt = courts.first;
   String? _challengeId;
-  AuthRepository? _repository;
+  AuthRepository? _activeRepository;
 
   @override
   void initState() {
     super.initState();
-    _repository = widget.authRepository ??
-        (ApiConfig.enabled ? ApiAuthRepository() : FirebaseAuthRepository());
+    _activeRepository = widget.authRepository;
     _otp.addListener(_refreshOtp);
   }
 
@@ -68,10 +61,7 @@ class _SignUpPageState extends State<SignUpPage> {
     _otpFocus.dispose();
     for (final c in [
       _fullName,
-      _email,
       _phone,
-      _password,
-      _confirmPassword,
       _enrollment,
       _practiceAreas,
       _otp,
@@ -94,7 +84,7 @@ class _SignUpPageState extends State<SignUpPage> {
   }
 
   Future<void> _runAction(Future<void> Function() action) async {
-    if (_loading) return;
+    if (_loading || _googleLoading) return;
     setState(() => _loading = true);
     try {
       await action();
@@ -107,11 +97,7 @@ class _SignUpPageState extends State<SignUpPage> {
 
   void _enterApp() => openAppShell(
         context,
-        !_emailMode
-            ? ((_repository is ApiAuthRepository)
-                ? _repository
-                : ApiAuthRepository())
-            : (_repository ?? FirebaseAuthRepository()),
+        _activeRepository ?? ApiAuthRepository(),
       );
 
   void _openSignIn() {
@@ -121,7 +107,7 @@ class _SignUpPageState extends State<SignUpPage> {
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(
           builder: (_) => LoginPage(
-            authRepository: _repository,
+            authRepository: _activeRepository,
             showWelcome: false,
           ),
         ),
@@ -129,30 +115,26 @@ class _SignUpPageState extends State<SignUpPage> {
     }
   }
 
-  Future<void> _continueToNextStep() async {
+  ApiAuthRepository _getApiRepo() {
+    if (_activeRepository is ApiAuthRepository) {
+      return _activeRepository! as ApiAuthRepository;
+    }
+    return ApiAuthRepository();
+  }
+
+  Future<void> _sendOtp() async {
     if (!(_accountFormKey.currentState?.validate() ?? false)) return;
 
-    if (_emailMode) {
-      if (_password.text != _confirmPassword.text) {
-        toast(context, 'Passwords do not match.');
-        return;
-      }
-      // In email mode, proceed to Advocate Profile step
-      setState(() => _step = 2);
-    } else {
-      // In phone mode, send OTP and move to OTP step
-      await _runAction(() async {
-        final phoneText = '+91${_phone.text.trim()}';
-        final apiRepo = (_repository is ApiAuthRepository)
-            ? (_repository as ApiAuthRepository)
-            : ApiAuthRepository();
-        _challengeId = await apiRepo.requestOtp(phoneText);
-        if (!mounted) return;
-        toast(context, 'Verification code sent!');
-        setState(() => _step = 1);
-        _startCountdown();
-      });
-    }
+    await _runAction(() async {
+      final phoneText = '+91${_phone.text.trim()}';
+      final apiRepo = _getApiRepo();
+      _challengeId = await apiRepo.requestOtp(phoneText);
+      _activeRepository = apiRepo;
+      if (!mounted) return;
+      toast(context, 'Verification code sent!');
+      setState(() => _step = 1);
+      _startCountdown();
+    });
   }
 
   Future<void> _verifyOtp() async {
@@ -160,11 +142,11 @@ class _SignUpPageState extends State<SignUpPage> {
       toast(context, 'Enter the complete 6-digit OTP.');
       return;
     }
+
     await _runAction(() async {
-      final apiRepo = (_repository is ApiAuthRepository)
-          ? (_repository as ApiAuthRepository)
-          : ApiAuthRepository();
+      final apiRepo = _getApiRepo();
       await apiRepo.verifyOtp(_challengeId!, _otp.text.trim());
+      _activeRepository = apiRepo;
       if (!mounted) return;
       toast(context, 'Phone number verified!');
       setState(() => _step = 2);
@@ -172,11 +154,9 @@ class _SignUpPageState extends State<SignUpPage> {
   }
 
   Future<void> _resendOtp() async {
-    if (_seconds > 0 || _loading) return;
+    if (_seconds > 0 || _loading || _googleLoading) return;
     await _runAction(() async {
-      final apiRepo = (_repository is ApiAuthRepository)
-          ? (_repository as ApiAuthRepository)
-          : ApiAuthRepository();
+      final apiRepo = _getApiRepo();
       _challengeId = await apiRepo.requestOtp('+91${_phone.text.trim()}');
       if (!mounted) return;
       _otp.clear();
@@ -186,31 +166,34 @@ class _SignUpPageState extends State<SignUpPage> {
     });
   }
 
+  Future<void> _signUpWithGoogle() async {
+    if (_loading || _googleLoading) return;
+    setState(() => _googleLoading = true);
+    try {
+      final firebaseRepo = FirebaseAuthRepository();
+      await firebaseRepo.signInWithGoogle();
+      _activeRepository = firebaseRepo;
+
+      final currentUser = firebaseRepo.currentUser;
+      if (currentUser?.displayName != null && _fullName.text.isEmpty) {
+        _fullName.text = currentUser!.displayName!;
+      }
+
+      if (!mounted) return;
+      toast(context, 'Google account linked!');
+      // Proceed to Advocate Profile step to collect Bar Council details
+      setState(() => _step = 2);
+    } catch (e) {
+      if (mounted) toast(context, 'Google Sign-Up failed: $e');
+    } finally {
+      if (mounted) setState(() => _googleLoading = false);
+    }
+  }
+
   Future<void> _completeRegistration() async {
     if (!(_profileFormKey.currentState?.validate() ?? false)) return;
 
     await _runAction(() async {
-      final authRepo = _repository ?? FirebaseAuthRepository();
-
-      // If user registered with email mode, create their account now
-      if (_emailMode) {
-        if (authRepo is FirebaseAuthRepository) {
-          try {
-            await authRepo.registerWithEmail(
-              _email.text.trim(),
-              _password.text.trim(),
-            );
-          } catch (_) {
-            // If already registered or fallback needed, try standard sign in
-            await authRepo.signInWithEmail(
-              _email.text.trim(),
-              _password.text.trim(),
-            );
-          }
-        }
-      }
-
-      // Save Advocate Profile details in Firestore
       try {
         final firestoreRepo = FirebaseProfileRepository();
         final courtIds = await firestoreRepo.listCourtIdsByName();
@@ -225,7 +208,7 @@ class _SignUpPageState extends State<SignUpPage> {
           ),
         );
       } catch (e) {
-        debugPrint('Profile save note: $e');
+        debugPrint('Profile save error note: $e');
       }
 
       if (mounted) setState(() => _step = 3);
@@ -288,11 +271,9 @@ class _SignUpPageState extends State<SignUpPage> {
             onBack: _step > 0
                 ? () {
                     setState(() {
-                      if (_step == 2 && !_emailMode) {
-                        _step = 1;
-                      } else if (_step == 1) {
+                      if (_step == 2) {
                         _step = 0;
-                      } else if (_step == 2 && _emailMode) {
+                      } else if (_step == 1) {
                         _step = 0;
                       }
                     });
@@ -302,7 +283,7 @@ class _SignUpPageState extends State<SignUpPage> {
                     : null),
             onAction: _step == 2
                 ? () => setState(() => _step = 3)
-                : () => showAuthHelpDialog(context, onDemo: _enterApp),
+                : () => showAuthHelpDialog(context),
             actionLabel: _step == 2 ? 'Skip for now' : 'Need help?',
           ),
           const SizedBox(height: 20),
@@ -324,31 +305,10 @@ class _SignUpPageState extends State<SignUpPage> {
           const AuthTitle(
             eyebrow: 'Join VakilSetu',
             title: 'Create Account',
-            subtitle: 'Register as an advocate or legal professional',
+            subtitle: 'Register with your mobile number or Google account',
           ),
-          const SizedBox(height: 22),
-          Row(
-            children: [
-              Expanded(
-                child: AuthMethodTab(
-                  label: 'Email & Password',
-                  selected: _emailMode,
-                  icon: Icons.mail_outline_rounded,
-                  onTap: () => setState(() => _emailMode = true),
-                ),
-              ),
-              Expanded(
-                child: AuthMethodTab(
-                  label: 'Mobile OTP',
-                  selected: !_emailMode,
-                  icon: Icons.phone_android_rounded,
-                  onTap: () => setState(() => _emailMode = false),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 20),
-          const AuthFieldLabel('Full Name *'),
+          const SizedBox(height: 24),
+          const AuthFieldLabel('Full Legal Name *'),
           TextFormField(
             controller: _fullName,
             textCapitalization: TextCapitalization.words,
@@ -357,117 +317,68 @@ class _SignUpPageState extends State<SignUpPage> {
               hintText: 'e.g. Adv. Rajesh Sharma',
             ),
             validator: (v) =>
-                (v ?? '').trim().length >= 3 ? null : 'Enter your full name.',
+                (v ?? '').trim().length >= 3 ? null : 'Enter your full legal name.',
           ),
-          const SizedBox(height: 14),
-          if (_emailMode) ...[
-            const AuthFieldLabel('Email Address *'),
-            TextFormField(
-              controller: _email,
-              keyboardType: TextInputType.emailAddress,
-              decoration: const InputDecoration(
-                prefixIcon: Icon(Icons.mail_outline_rounded),
-                hintText: 'advocate@example.com',
-              ),
-              validator: (v) => (v ?? '').contains('@') && (v ?? '').contains('.')
-                  ? null
-                  : 'Enter a valid email address.',
+          const SizedBox(height: 16),
+          const AuthFieldLabel('Mobile Number *'),
+          TextFormField(
+            controller: _phone,
+            keyboardType: TextInputType.phone,
+            maxLength: 10,
+            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+            decoration: const InputDecoration(
+              prefixText: '🇮🇳  +91  ',
+              hintText: 'Enter 10-digit mobile number',
+              counterText: '',
             ),
-            const SizedBox(height: 14),
-            const AuthFieldLabel('Mobile Number (Optional)'),
-            TextFormField(
-              controller: _phone,
-              keyboardType: TextInputType.phone,
-              maxLength: 10,
-              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-              decoration: const InputDecoration(
-                prefixText: '🇮🇳  +91  ',
-                hintText: '10-digit number',
-                counterText: '',
-              ),
-            ),
-            const SizedBox(height: 14),
-            const AuthFieldLabel('Create Password *'),
-            TextFormField(
-              controller: _password,
-              obscureText: _hidePassword,
-              decoration: InputDecoration(
-                prefixIcon: const Icon(Icons.lock_outline_rounded),
-                hintText: 'At least 6 characters',
-                suffixIcon: IconButton(
-                  onPressed: () => setState(() => _hidePassword = !_hidePassword),
-                  icon: Icon(
-                    _hidePassword
-                        ? Icons.visibility_off_outlined
-                        : Icons.visibility_outlined,
-                  ),
-                ),
-              ),
-              validator: (v) =>
-                  (v ?? '').length >= 6 ? null : 'Minimum 6 characters required.',
-            ),
-            const SizedBox(height: 14),
-            const AuthFieldLabel('Confirm Password *'),
-            TextFormField(
-              controller: _confirmPassword,
-              obscureText: _hideConfirmPassword,
-              decoration: InputDecoration(
-                prefixIcon: const Icon(Icons.lock_reset_rounded),
-                hintText: 'Re-enter your password',
-                suffixIcon: IconButton(
-                  onPressed: () => setState(
-                    () => _hideConfirmPassword = !_hideConfirmPassword,
-                  ),
-                  icon: Icon(
-                    _hideConfirmPassword
-                        ? Icons.visibility_off_outlined
-                        : Icons.visibility_outlined,
-                  ),
-                ),
-              ),
-              validator: (v) {
-                if ((v ?? '').isEmpty) return 'Confirm your password.';
-                if (v != _password.text) return 'Passwords do not match.';
-                return null;
-              },
-            ),
-          ] else ...[
-            const AuthFieldLabel('Mobile Number *'),
-            TextFormField(
-              controller: _phone,
-              keyboardType: TextInputType.phone,
-              maxLength: 10,
-              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-              decoration: const InputDecoration(
-                prefixText: '🇮🇳  +91  ',
-                hintText: 'Enter 10-digit mobile number',
-                counterText: '',
-              ),
-              validator: (v) => RegExp(r'^\d{10}$').hasMatch(v ?? '')
-                  ? null
-                  : 'Enter a valid 10-digit phone number.',
-            ),
-            const SizedBox(height: 8),
-            const Row(
-              children: [
-                Icon(Icons.shield_outlined, color: slateBlue, size: 14),
-                SizedBox(width: 6),
-                Text(
-                  'We will send a 6-digit OTP for number verification.',
+            validator: (v) => RegExp(r'^\d{10}$').hasMatch(v ?? '')
+                ? null
+                : 'Enter a valid 10-digit phone number.',
+          ),
+          const SizedBox(height: 8),
+          const Row(
+            children: [
+              Icon(Icons.shield_outlined, color: slateBlue, size: 14),
+              SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'We will send a 6-digit OTP code to verify your number.',
                   style: TextStyle(color: slateBlue, fontSize: 11),
                 ),
-              ],
-            ),
-          ],
+              ),
+            ],
+          ),
           const SizedBox(height: 24),
           AuthPrimaryButton(
-            label: _loading
-                ? 'Processing…'
-                : (_emailMode ? 'Continue to Bar Details' : 'Send Verification OTP'),
+            label: _loading ? 'Sending OTP…' : 'Send Verification OTP',
             loading: _loading,
-            onPressed: _continueToNextStep,
+            onPressed: _sendOtp,
           ),
-          const SizedBox(height: 18),
+          const SizedBox(height: 22),
+          Row(
+            children: [
+              const Expanded(child: Divider()),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 14),
+                child: Text(
+                  'OR',
+                  style: TextStyle(
+                    color: muted,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              const Expanded(child: Divider()),
+            ],
+          ),
+          const SizedBox(height: 22),
+          GoogleSignInButton(
+            onPressed: _signUpWithGoogle,
+            loading: _googleLoading,
+            label: 'Sign up with Google',
+          ),
+          const SizedBox(height: 24),
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
@@ -486,14 +397,6 @@ class _SignUpPageState extends State<SignUpPage> {
                 ),
               ),
             ],
-          ),
-          const SizedBox(height: 8),
-          Center(
-            child: TextButton.icon(
-              onPressed: _enterApp,
-              icon: const Icon(Icons.explore_outlined, size: 18),
-              label: const Text('Explore Demo as Guest'),
-            ),
           ),
           const SizedBox(height: 16),
           const AuthCommunityCard(),
@@ -593,7 +496,7 @@ class _SignUpPageState extends State<SignUpPage> {
           style: TextStyle(color: slateBlue, fontSize: 12),
         ),
         TextButton(
-          onPressed: _seconds > 0 || _loading ? null : _resendOtp,
+          onPressed: _seconds > 0 || _loading || _googleLoading ? null : _resendOtp,
           child: Text(
             _seconds > 0
                 ? 'Resend OTP in 00:${_seconds.toString().padLeft(2, '0')}'
@@ -607,12 +510,10 @@ class _SignUpPageState extends State<SignUpPage> {
           onPressed: _verifyOtp,
         ),
         const SizedBox(height: 10),
-        Text(
-          _repository == null
-              ? 'Preview code: 123456 · SMS simulated'
-              : 'Development test code: 123456',
+        const Text(
+          'Development test code: 123456',
           textAlign: TextAlign.center,
-          style: const TextStyle(color: muted, fontSize: 11),
+          style: TextStyle(color: muted, fontSize: 11),
         ),
       ],
     );

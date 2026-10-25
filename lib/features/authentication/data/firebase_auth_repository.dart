@@ -79,6 +79,23 @@ class FirebaseAuthRepository implements AuthRepository {
     );
   }
 
+  Future<SessionIdentity> signInWithGoogle() async {
+    final googleProvider = GoogleAuthProvider();
+    googleProvider.addScope('email');
+    googleProvider.addScope('profile');
+    
+    final credential = await _auth.signInWithProvider(googleProvider);
+    final user = credential.user!;
+    await _syncUserDoc(user);
+
+    return SessionIdentity(
+      userId: user.uid,
+      deviceId: 'mobile_${user.uid.substring(0, 6)}',
+      verification: VerificationStatus.verified,
+      deviceStatus: DeviceStatus.trusted,
+    );
+  }
+
   Future<SessionIdentity> signInAnonymously() async {
     final credential = await _auth.signInAnonymously();
     final user = credential.user!;
