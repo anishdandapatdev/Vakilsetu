@@ -226,8 +226,6 @@ class _LoginPageState extends State<LoginPage> {
                 : (!widget.showWelcome && Navigator.of(context).canPop()
                     ? () => Navigator.of(context).pop()
                     : null),
-            onAction: () => showAuthHelpDialog(context),
-            actionLabel: 'Need help?',
           ),
           const SizedBox(height: 24),
           if (_step <= 1) _buildPhoneLoginForm(),
@@ -245,18 +243,9 @@ class _LoginPageState extends State<LoginPage> {
         title: 'Sign In',
         subtitle: 'Enter your mobile number to receive a secure OTP code',
       ),
-      const SizedBox(height: 24),
-      const AuthFieldLabel('Mobile Number *'),
-      TextFormField(
+      const SizedBox(height: 28),
+      CurvedPhoneInputField(
         controller: _phoneController,
-        keyboardType: TextInputType.phone,
-        maxLength: 10,
-        inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-        decoration: const InputDecoration(
-          prefixText: '🇮🇳  +91  ',
-          hintText: 'Enter 10-digit mobile number',
-          counterText: '',
-        ),
         validator: (v) => RegExp(r'^\d{10}$').hasMatch(v ?? '')
             ? null
             : 'Enter a valid 10-digit mobile number.',

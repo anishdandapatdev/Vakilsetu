@@ -281,10 +281,8 @@ class _SignUpPageState extends State<SignUpPage> {
                 : (Navigator.of(context).canPop()
                     ? () => Navigator.of(context).pop()
                     : null),
-            onAction: _step == 2
-                ? () => setState(() => _step = 3)
-                : () => showAuthHelpDialog(context),
-            actionLabel: _step == 2 ? 'Skip for now' : 'Need help?',
+            onAction: _step == 2 ? () => setState(() => _step = 3) : null,
+            actionLabel: _step == 2 ? 'Skip for now' : null,
           ),
           const SizedBox(height: 20),
           if (_step == 0) _buildAccountDetailsForm(),
@@ -308,34 +306,23 @@ class _SignUpPageState extends State<SignUpPage> {
             subtitle: 'Register with your mobile number or Google account',
           ),
           const SizedBox(height: 24),
-          const AuthFieldLabel('Full Legal Name *'),
-          TextFormField(
+          CurvedInputField(
             controller: _fullName,
+            label: 'Full Legal Name *',
+            hint: 'e.g. Adv. Rajesh Sharma',
+            prefixIcon: Icons.person_outline_rounded,
             textCapitalization: TextCapitalization.words,
-            decoration: const InputDecoration(
-              prefixIcon: Icon(Icons.person_outline_rounded),
-              hintText: 'e.g. Adv. Rajesh Sharma',
-            ),
             validator: (v) =>
                 (v ?? '').trim().length >= 3 ? null : 'Enter your full legal name.',
           ),
           const SizedBox(height: 16),
-          const AuthFieldLabel('Mobile Number *'),
-          TextFormField(
+          CurvedPhoneInputField(
             controller: _phone,
-            keyboardType: TextInputType.phone,
-            maxLength: 10,
-            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-            decoration: const InputDecoration(
-              prefixText: '🇮🇳  +91  ',
-              hintText: 'Enter 10-digit mobile number',
-              counterText: '',
-            ),
             validator: (v) => RegExp(r'^\d{10}$').hasMatch(v ?? '')
                 ? null
                 : 'Enter a valid 10-digit phone number.',
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 10),
           const Row(
             children: [
               Icon(Icons.shield_outlined, color: slateBlue, size: 14),
@@ -350,7 +337,7 @@ class _SignUpPageState extends State<SignUpPage> {
           ),
           const SizedBox(height: 24),
           AuthPrimaryButton(
-            label: _loading ? 'Sending OTP…' : 'Send Verification OTP',
+            label: _loading ? 'Sending OTP…' : 'Send OTP',
             loading: _loading,
             onPressed: _sendOtp,
           ),
@@ -563,52 +550,42 @@ class _SignUpPageState extends State<SignUpPage> {
             ),
           ),
           const SizedBox(height: 18),
-          const AuthFieldLabel('Full Legal Name *'),
-          TextFormField(
+          CurvedInputField(
             controller: _fullName,
+            label: 'Full Legal Name *',
+            hint: 'Advocate full legal name',
+            prefixIcon: Icons.person_outline_rounded,
             textCapitalization: TextCapitalization.words,
-            decoration: const InputDecoration(
-              prefixIcon: Icon(Icons.person_outline_rounded),
-              hintText: 'Advocate full legal name',
-            ),
             validator: (v) =>
                 (v ?? '').trim().length >= 3 ? null : 'Enter your full name.',
           ),
           const SizedBox(height: 14),
-          const AuthFieldLabel('Bar Council Enrollment No. *'),
-          TextFormField(
+          CurvedInputField(
             controller: _enrollment,
+            label: 'Bar Council Enrollment No. *',
+            hint: 'e.g. D/1234/2020 or MAH/5678/2018',
+            prefixIcon: Icons.badge_outlined,
             textCapitalization: TextCapitalization.characters,
-            decoration: const InputDecoration(
-              prefixIcon: Icon(Icons.badge_outlined),
-              hintText: 'e.g. D/1234/2020 or MAH/5678/2018',
-            ),
             validator: (v) => (v ?? '').trim().isNotEmpty
                 ? null
                 : 'Enter your Bar Council enrollment number.',
           ),
           const SizedBox(height: 14),
-          const AuthFieldLabel('Primary Practice Court *'),
-          DropdownButtonFormField<String>(
-            initialValue: _selectedCourt,
-            decoration: const InputDecoration(
-              prefixIcon: Icon(Icons.account_balance_outlined),
-            ),
-            items: courts
-                .map((court) => DropdownMenuItem(value: court, child: Text(court)))
-                .toList(),
+          CurvedDropdownField(
+            label: 'Primary Practice Court *',
+            value: _selectedCourt,
+            items: courts,
+            prefixIcon: Icons.account_balance_outlined,
             onChanged: (value) {
               if (value != null) setState(() => _selectedCourt = value);
             },
           ),
           const SizedBox(height: 14),
-          const AuthFieldLabel('Practice Areas'),
-          TextFormField(
+          CurvedInputField(
             controller: _practiceAreas,
-            decoration: const InputDecoration(
-              prefixIcon: Icon(Icons.gavel_rounded),
-              hintText: 'e.g. Civil Litigation, Constitutional Law, NCLT',
-            ),
+            label: 'Practice Areas',
+            hint: 'e.g. Civil Litigation, Constitutional Law, NCLT',
+            prefixIcon: Icons.gavel_rounded,
           ),
           const SizedBox(height: 16),
           const Surface(

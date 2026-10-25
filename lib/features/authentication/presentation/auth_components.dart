@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../../app/app_shell.dart';
 import '../../../app/demo_store.dart';
@@ -162,6 +163,10 @@ class AuthWelcomePanel extends StatelessWidget {
         if (onSignUp != null) ...[
           const SizedBox(height: 12),
           OutlinedButton(
+            style: OutlinedButton.styleFrom(
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(32)),
+            ),
             onPressed: onSignUp,
             child: const Text('Create New Advocate Account'),
           ),
@@ -171,17 +176,18 @@ class AuthWelcomePanel extends StatelessWidget {
   );
 }
 
-/// Header for login / signup forms with back button, logo and right actions.
+/// Header for login / signup forms with back button and logo.
+/// Notice: "Need help?" has been completely removed.
 class AuthHeader extends StatelessWidget {
   final VoidCallback? onBack;
   final VoidCallback? onAction;
-  final String actionLabel;
+  final String? actionLabel;
 
   const AuthHeader({
     super.key,
     this.onBack,
     this.onAction,
-    this.actionLabel = 'Need help?',
+    this.actionLabel,
   });
 
   @override
@@ -197,10 +203,10 @@ class AuthHeader extends StatelessWidget {
         else
           const VakilSetuLogo(height: 40),
         const Spacer(),
-        if (onAction != null)
+        if (onAction != null && actionLabel != null)
           TextButton(
             onPressed: onAction,
-            child: Text(actionLabel),
+            child: Text(actionLabel!),
           ),
       ],
     );
@@ -249,62 +255,349 @@ class AuthTitle extends StatelessWidget {
   );
 }
 
-/// Tab selector for switching auth modes.
-class AuthMethodTab extends StatelessWidget {
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-  final IconData? icon;
+/// Curved pill-shaped phone number input matching the requested design:
+/// Rounded border (radius 32), "+91" prefix, vertical divider "|",
+/// stacked "Mobile number" label on top and text input below.
+class CurvedPhoneInputField extends StatelessWidget {
+  final TextEditingController controller;
+  final FocusNode? focusNode;
+  final ValueChanged<String>? onChanged;
+  final String? Function(String?)? validator;
+  final bool autofocus;
 
-  const AuthMethodTab({
+  const CurvedPhoneInputField({
     super.key,
-    required this.label,
-    required this.selected,
-    required this.onTap,
-    this.icon,
+    required this.controller,
+    this.focusNode,
+    this.onChanged,
+    this.validator,
+    this.autofocus = false,
   });
 
   @override
-  Widget build(BuildContext context) => InkWell(
-    onTap: onTap,
-    borderRadius: BorderRadius.circular(8),
-    child: Container(
-      padding: const EdgeInsets.symmetric(vertical: 11),
+  Widget build(BuildContext context) {
+    return FormField<String>(
+      validator: (v) => validator != null ? validator!(controller.text) : null,
+      initialValue: controller.text,
+      builder: (state) {
+        final hasError = state.hasError;
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              height: 64,
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(32),
+                border: Border.all(
+                  color: hasError ? const Color(0xFFE53935) : const Color(0xFFCBD5E1),
+                  width: hasError ? 1.4 : 1.2,
+                ),
+                boxShadow: const [
+                  BoxShadow(
+                    color: Color(0x06000000),
+                    blurRadius: 8,
+                    offset: Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: Row(
+                children: [
+                  const Text(
+                    '+91',
+                    style: TextStyle(
+                      color: ink,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(width: 14),
+                  Container(
+                    width: 1,
+                    height: 26,
+                    color: const Color(0xFFCBD5E1),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Mobile number',
+                          style: TextStyle(
+                            color: Color(0xFF94A3B8),
+                            fontSize: 11,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                        const SizedBox(height: 1),
+                        TextField(
+                          controller: controller,
+                          focusNode: focusNode,
+                          autofocus: autofocus,
+                          keyboardType: TextInputType.phone,
+                          maxLength: 10,
+                          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                          onChanged: (val) {
+                            state.didChange(val);
+                            onChanged?.call(val);
+                          },
+                          style: const TextStyle(
+                            color: ink,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 0.5,
+                          ),
+                          decoration: const InputDecoration(
+                            isDense: true,
+                            contentPadding: EdgeInsets.zero,
+                            border: InputBorder.none,
+                            enabledBorder: InputBorder.none,
+                            focusedBorder: InputBorder.none,
+                            counterText: '',
+                            hintText: '1234567890',
+                            hintStyle: TextStyle(
+                              color: Color(0xFFCBD5E1),
+                              fontSize: 16,
+                              fontWeight: FontWeight.w400,
+                              letterSpacing: 0.5,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            if (hasError)
+              Padding(
+                padding: const EdgeInsets.only(left: 20, top: 6),
+                child: Text(
+                  state.errorText ?? '',
+                  style: const TextStyle(
+                    color: Color(0xFFE53935),
+                    fontSize: 11,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+/// General curved pill-shaped input field for Name, Bar Council Enrollment, etc.
+class CurvedInputField extends StatelessWidget {
+  final TextEditingController controller;
+  final String label;
+  final String hint;
+  final IconData? prefixIcon;
+  final TextCapitalization textCapitalization;
+  final String? Function(String?)? validator;
+  final Widget? suffix;
+
+  const CurvedInputField({
+    super.key,
+    required this.controller,
+    required this.label,
+    required this.hint,
+    this.prefixIcon,
+    this.textCapitalization = TextCapitalization.none,
+    this.validator,
+    this.suffix,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return FormField<String>(
+      validator: (v) => validator != null ? validator!(controller.text) : null,
+      initialValue: controller.text,
+      builder: (state) {
+        final hasError = state.hasError;
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              height: 64,
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(32),
+                border: Border.all(
+                  color: hasError ? const Color(0xFFE53935) : const Color(0xFFCBD5E1),
+                  width: hasError ? 1.4 : 1.2,
+                ),
+                boxShadow: const [
+                  BoxShadow(
+                    color: Color(0x06000000),
+                    blurRadius: 8,
+                    offset: Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: Row(
+                children: [
+                  if (prefixIcon != null) ...[
+                    Icon(prefixIcon, color: slateBlue, size: 20),
+                    const SizedBox(width: 12),
+                  ],
+                  Expanded(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          label,
+                          style: const TextStyle(
+                            color: Color(0xFF94A3B8),
+                            fontSize: 11,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                        const SizedBox(height: 1),
+                        TextField(
+                          controller: controller,
+                          textCapitalization: textCapitalization,
+                          onChanged: (val) => state.didChange(val),
+                          style: const TextStyle(
+                            color: ink,
+                            fontSize: 15,
+                            fontWeight: FontWeight.w600,
+                          ),
+                          decoration: InputDecoration(
+                            isDense: true,
+                            contentPadding: EdgeInsets.zero,
+                            border: InputBorder.none,
+                            enabledBorder: InputBorder.none,
+                            focusedBorder: InputBorder.none,
+                            hintText: hint,
+                            hintStyle: const TextStyle(
+                              color: Color(0xFFCBD5E1),
+                              fontSize: 15,
+                              fontWeight: FontWeight.w400,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (suffix != null) suffix!,
+                ],
+              ),
+            ),
+            if (hasError)
+              Padding(
+                padding: const EdgeInsets.only(left: 20, top: 6),
+                child: Text(
+                  state.errorText ?? '',
+                  style: const TextStyle(
+                    color: Color(0xFFE53935),
+                    fontSize: 11,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+/// Curved dropdown field matching the pill style.
+class CurvedDropdownField extends StatelessWidget {
+  final String label;
+  final String value;
+  final List<String> items;
+  final ValueChanged<String?> onChanged;
+  final IconData? prefixIcon;
+
+  const CurvedDropdownField({
+    super.key,
+    required this.label,
+    required this.value,
+    required this.items,
+    required this.onChanged,
+    this.prefixIcon,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 64,
+      padding: const EdgeInsets.symmetric(horizontal: 20),
       decoration: BoxDecoration(
-        border: Border(
-          bottom: BorderSide(
-            color: selected ? const Color(0xFF0870E4) : line,
-            width: selected ? 2.5 : 1,
-          ),
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(32),
+        border: Border.all(
+          color: const Color(0xFFCBD5E1),
+          width: 1.2,
         ),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x06000000),
+            blurRadius: 8,
+            offset: Offset(0, 2),
+          ),
+        ],
       ),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          if (icon != null) ...[
-            Icon(
-              icon,
-              size: 16,
-              color: selected ? const Color(0xFF0870E4) : slateBlue,
-            ),
-            const SizedBox(width: 6),
+          if (prefixIcon != null) ...[
+            Icon(prefixIcon, color: slateBlue, size: 20),
+            const SizedBox(width: 12),
           ],
-          Text(
-            label,
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              color: selected ? const Color(0xFF0870E4) : slateBlue,
-              fontSize: 12,
-              fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+          Expanded(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: const TextStyle(
+                    color: Color(0xFF94A3B8),
+                    fontSize: 11,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                DropdownButtonHideUnderline(
+                  child: DropdownButton<String>(
+                    value: value,
+                    isDense: true,
+                    isExpanded: true,
+                    icon: const Icon(Icons.keyboard_arrow_down_rounded, color: slateBlue),
+                    style: const TextStyle(
+                      color: ink,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                    ),
+                    items: items
+                        .map(
+                          (item) => DropdownMenuItem(
+                            value: item,
+                            child: Text(item, overflow: TextOverflow.ellipsis),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: onChanged,
+                  ),
+                ),
+              ],
             ),
           ),
         ],
       ),
-    ),
-  );
+    );
+  }
 }
 
-/// Primary action button for Auth with standard sizing and loading indicator.
+/// Primary action button for Auth styled with full curved pill shape (radius 32)
+/// and vibrant blue color (Color(0xFF005CEE)) matching Image 2.
 class AuthPrimaryButton extends StatelessWidget {
   final String label;
   final VoidCallback? onPressed;
@@ -323,10 +616,10 @@ class AuthPrimaryButton extends StatelessWidget {
   Widget build(BuildContext context) => FilledButton(
     onPressed: loading ? null : onPressed,
     style: FilledButton.styleFrom(
-      backgroundColor: const Color(0xFF0870E4),
-      disabledBackgroundColor: const Color(0xFF0870E4).withValues(alpha: 0.6),
-      padding: const EdgeInsets.symmetric(vertical: 16),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      backgroundColor: const Color(0xFF005CEE),
+      disabledBackgroundColor: const Color(0xFF005CEE).withValues(alpha: 0.6),
+      padding: const EdgeInsets.symmetric(vertical: 17),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(32)),
       elevation: 0,
     ),
     child: loading
@@ -349,7 +642,7 @@ class AuthPrimaryButton extends StatelessWidget {
               Text(
                 label,
                 style: const TextStyle(
-                  fontSize: 14,
+                  fontSize: 15,
                   fontWeight: FontWeight.w700,
                   color: Colors.white,
                 ),
@@ -359,7 +652,7 @@ class AuthPrimaryButton extends StatelessWidget {
   );
 }
 
-/// Google Sign-In button with authentic Google 4-color 'G' icon.
+/// Google Sign-In button with authentic Google 4-color 'G' icon and curved pill shape.
 class GoogleSignInButton extends StatelessWidget {
   final VoidCallback? onPressed;
   final bool loading;
@@ -379,9 +672,9 @@ class GoogleSignInButton extends StatelessWidget {
       style: OutlinedButton.styleFrom(
         backgroundColor: Colors.white,
         foregroundColor: ink,
-        side: const BorderSide(color: line, width: 1.2),
-        padding: const EdgeInsets.symmetric(vertical: 15, horizontal: 16),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        side: const BorderSide(color: Color(0xFFCBD5E1), width: 1.2),
+        padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(32)),
         elevation: 0,
       ),
       child: loading
@@ -484,25 +777,6 @@ class _GoogleGLogoPainter extends CustomPainter {
   bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
-/// Consistent styled label for text inputs.
-class AuthFieldLabel extends StatelessWidget {
-  final String text;
-  const AuthFieldLabel(this.text, {super.key});
-
-  @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.only(bottom: 7, top: 4),
-    child: Text(
-      text,
-      style: const TextStyle(
-        color: navy,
-        fontSize: 12,
-        fontWeight: FontWeight.w700,
-      ),
-    ),
-  );
-}
-
 /// Community highlight card shown at the bottom of authentication pages.
 class AuthCommunityCard extends StatelessWidget {
   const AuthCommunityCard({super.key});
@@ -526,70 +800,6 @@ class AuthCommunityCard extends StatelessWidget {
           ),
         ),
       ],
-    ),
-  );
-}
-
-/// Shows help modal sheet.
-void showAuthHelpDialog(BuildContext context) {
-  showModalBottomSheet(
-    context: context,
-    backgroundColor: Colors.white,
-    shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-    ),
-    builder: (ctx) => Padding(
-      padding: const EdgeInsets.fromLTRB(24, 20, 24, 32),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Center(
-            child: Container(
-              width: 44,
-              height: 4,
-              decoration: BoxDecoration(
-                color: line,
-                borderRadius: BorderRadius.circular(4),
-              ),
-            ),
-          ),
-          const SizedBox(height: 18),
-          Text('Need Help with VakilSetu?', style: heading(18)),
-          const SizedBox(height: 8),
-          const Text(
-            'If you are having trouble signing in, verifying your Bar Council credentials, or receiving OTPs, here are ways to get support:',
-            style: TextStyle(color: slateBlue, fontSize: 12, height: 1.4),
-          ),
-          const SizedBox(height: 16),
-          ListTile(
-            contentPadding: EdgeInsets.zero,
-            leading: const CircleAvatar(
-              backgroundColor: paleTeal,
-              child: Icon(Icons.email_outlined, color: teal),
-            ),
-            title: const Text(
-              'Email Support',
-              style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
-            ),
-            subtitle: const Text('support@vakilsetu.in'),
-            onTap: () => Navigator.pop(ctx),
-          ),
-          ListTile(
-            contentPadding: EdgeInsets.zero,
-            leading: const CircleAvatar(
-              backgroundColor: paleBlue,
-              child: Icon(Icons.phone_outlined, color: navy),
-            ),
-            title: const Text(
-              'Advocate Helpline',
-              style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
-            ),
-            subtitle: const Text('+91 11 2345 6789 (Mon-Sat, 9AM-7PM)'),
-            onTap: () => Navigator.pop(ctx),
-          ),
-        ],
-      ),
     ),
   );
 }
