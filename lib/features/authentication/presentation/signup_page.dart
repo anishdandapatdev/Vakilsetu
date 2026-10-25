@@ -339,13 +339,7 @@ class _SignUpPageState extends State<SignUpPage> {
             loading: _loading,
             onPressed: _sendOtp,
           ),
-          const SizedBox(height: 10),
-          const Text(
-            'Demo: Use 9999999999 with OTP 123456',
-            textAlign: TextAlign.center,
-            style: TextStyle(color: muted, fontSize: 11),
-          ),
-          const SizedBox(height: 18),
+          const SizedBox(height: 22),
           Row(
             children: [
               const Expanded(child: Divider()),
@@ -499,12 +493,6 @@ class _SignUpPageState extends State<SignUpPage> {
           label: _loading ? 'Verifying…' : 'Verify & Continue',
           loading: _loading,
           onPressed: _verifyOtp,
-        ),
-        const SizedBox(height: 10),
-        const Text(
-          'Development test code: 123456',
-          textAlign: TextAlign.center,
-          style: TextStyle(color: muted, fontSize: 11),
         ),
       ],
     );

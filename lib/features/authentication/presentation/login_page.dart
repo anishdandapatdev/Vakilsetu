@@ -324,13 +324,7 @@ class _LoginPageState extends State<LoginPage> {
         loading: _loading,
         onPressed: _useOtpLogin ? _sendOtp : _signInWithPassword,
       ),
-      const SizedBox(height: 10),
-      const Text(
-        'Demo credentials: 9999999999 with OTP 123456 or Pass 123456',
-        textAlign: TextAlign.center,
-        style: TextStyle(color: muted, fontSize: 11),
-      ),
-      const SizedBox(height: 20),
+      const SizedBox(height: 24),
       Row(
         children: [
           const Expanded(child: Divider()),
@@ -483,12 +477,6 @@ class _LoginPageState extends State<LoginPage> {
         label: _loading ? 'Verifying…' : 'Verify & Sign In',
         loading: _loading,
         onPressed: _verifyOtp,
-      ),
-      const SizedBox(height: 10),
-      const Text(
-        'Development backend code: 123456',
-        textAlign: TextAlign.center,
-        style: TextStyle(color: muted, fontSize: 11),
       ),
     ],
   );
