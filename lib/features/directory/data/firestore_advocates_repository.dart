@@ -47,28 +47,33 @@ class FirestoreAdvocatesRepository
         await _seedInitialAdvocates();
         final refreshed = await ref.get();
         final items = _filterAndMap(refreshed.docs, query);
-        return AdvocatePage(items, null);
+        if (items.isNotEmpty) return AdvocatePage(items, null);
+        return AdvocatePage(_fallbackAdvocates(query, courtId), null);
       }
 
       final items = _filterAndMap(snapshot.docs, query);
-      return AdvocatePage(items, null);
+      if (items.isNotEmpty) return AdvocatePage(items, null);
+      return AdvocatePage(_fallbackAdvocates(query, courtId), null);
     } catch (e) {
       debugPrint('Firestore search error: $e');
-      final fallback = _defaultAdvocates
-          .where((a) =>
-              courtId == null ||
-              courtId.isEmpty ||
-              a.primaryCourtId == courtId)
-          .where((a) {
-            if (query.trim().isEmpty) return true;
-            final q = query.trim().toLowerCase();
-            return a.fullName.toLowerCase().contains(q) ||
-                a.enrollmentNumber.toLowerCase().contains(q) ||
-                (a.practiceAreas ?? '').toLowerCase().contains(q);
-          })
-          .toList();
-      return AdvocatePage(fallback, null);
+      return AdvocatePage(_fallbackAdvocates(query, courtId), null);
     }
+  }
+
+  List<AdvocateProfile> _fallbackAdvocates(String query, String? courtId) {
+    return _defaultAdvocates
+        .where((a) =>
+            courtId == null ||
+            courtId.isEmpty ||
+            a.primaryCourtId == courtId)
+        .where((a) {
+          if (query.trim().isEmpty) return true;
+          final q = query.trim().toLowerCase();
+          return a.fullName.toLowerCase().contains(q) ||
+              a.enrollmentNumber.toLowerCase().contains(q) ||
+              (a.practiceAreas ?? '').toLowerCase().contains(q);
+        })
+        .toList();
   }
 
   List<AdvocateProfile> _filterAndMap(

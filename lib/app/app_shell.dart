@@ -13,11 +13,9 @@ import '../features/profile/presentation/profile_page.dart';
 import '../features/profile/data/firebase_profile_repository.dart';
 import '../features/authentication/presentation/login_page.dart';
 import '../features/authentication/domain/auth_repository.dart';
-import '../features/authentication/data/api_auth_repository.dart';
 import '../features/authentication/data/firebase_auth_repository.dart';
 import '../features/directory/data/firestore_advocates_repository.dart';
 import '../features/court_channels/data/firestore_court_repository.dart';
-import '../features/chats/data/api_messaging_repository.dart';
 import '../features/chats/data/firestore_messaging_repository.dart';
 import '../features/chats/domain/conversation.dart';
 import '../features/chats/domain/server_messaging.dart';
@@ -66,13 +64,7 @@ class _AppShellState extends State<AppShell> {
   void initState() {
     super.initState();
     selected = widget.startProfile ? 6 : 0;
-    if (widget.authRepository is ApiAuthRepository) {
-      messagingRepository = ApiMessagingRepository(
-        widget.authRepository! as ApiAuthRepository,
-      );
-    } else {
-      messagingRepository = FirestoreMessagingRepository();
-    }
+    messagingRepository = FirestoreMessagingRepository();
   }
 
   @override

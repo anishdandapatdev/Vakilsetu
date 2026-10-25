@@ -62,6 +62,7 @@ class ApiAuthRepository implements AuthRepository {
           deviceStatus: 'trusted',
         );
         await _sessions.write(mockSession);
+        await _ensureFirebaseSession();
         return _identity(mockSession);
       }
       rethrow;
@@ -92,6 +93,7 @@ class ApiAuthRepository implements AuthRepository {
           deviceStatus: 'trusted',
         );
         await _sessions.write(mockSession);
+        await _ensureFirebaseSession();
         return _identity(mockSession);
       }
       rethrow;
@@ -123,6 +125,7 @@ class ApiAuthRepository implements AuthRepository {
           deviceStatus: 'trusted',
         );
         await _sessions.write(mockSession);
+        await _ensureFirebaseSession();
         return _identity(mockSession);
       }
       rethrow;
@@ -152,7 +155,7 @@ class ApiAuthRepository implements AuthRepository {
       deviceStatus: (response['deviceStatus'] as String?) ?? 'trusted',
     );
     await _sessions.write(session);
-    unawaited(_ensureFirebaseSession());
+    await _ensureFirebaseSession();
     return _identity(session);
   }
 
@@ -165,7 +168,7 @@ class ApiAuthRepository implements AuthRepository {
     )) {
       session = await _refresh(session);
     }
-    unawaited(_ensureFirebaseSession());
+    await _ensureFirebaseSession();
     return _identity(session);
   }
 

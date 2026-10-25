@@ -39,10 +39,16 @@ class FirestoreCourtRepository implements CourtRepository {
             .collection('courts')
             .orderBy('order')
             .get();
-        return refreshed.docs.map(_docToCourtChannel).toList(growable: false);
+        if (refreshed.docs.isNotEmpty) {
+          return refreshed.docs.map(_docToCourtChannel).toList(growable: false);
+        }
+        return _defaultCourts;
       }
 
-      return snapshot.docs.map(_docToCourtChannel).toList(growable: false);
+      if (snapshot.docs.isNotEmpty) {
+        return snapshot.docs.map(_docToCourtChannel).toList(growable: false);
+      }
+      return _defaultCourts;
     } catch (e) {
       debugPrint('Firestore listCourts error: $e');
       // If Firestore fails or rules restrict, fallback to default courts
@@ -139,13 +145,16 @@ class FirestoreCourtRepository implements CourtRepository {
             .collection('announcements')
             .orderBy('createdAt', descending: true)
             .get();
-        return refreshed.docs.map(_docToAnnouncement).toList(growable: false);
+        if (refreshed.docs.isNotEmpty) {
+          return refreshed.docs.map(_docToAnnouncement).toList(growable: false);
+        }
+        return _defaultAnnouncementsFor(channelId);
       }
 
       return snapshot.docs.map(_docToAnnouncement).toList(growable: false);
     } catch (e) {
       debugPrint('Firestore announcements error: $e');
-      return [];
+      return _defaultAnnouncementsFor(channelId);
     }
   }
 
@@ -350,5 +359,62 @@ class FirestoreCourtRepository implements CourtRepository {
         'authorName': 'Legal Services Authority',
       });
     }
+  }
+  static List<CourtAnnouncement> _defaultAnnouncementsFor(String channelId) {
+    final now = DateTime.now();
+    if (channelId.contains('delhi_high_court')) {
+      return [
+        CourtAnnouncement(
+          id: 'ann_dhc_1',
+          title: 'Roster of Sitting Judges - Winter Session',
+          body:
+              'The revised roster for sitting Division Benches and Single Benches has been notified by the registry. Check cause list for courtroom allocations.',
+          attachmentKey: 'Roster_Sitting_Judges.pdf',
+          revision: 1,
+          createdAt: now.subtract(const Duration(hours: 1)),
+        ),
+        CourtAnnouncement(
+          id: 'ann_dhc_2',
+          title: 'Daily Cause List - Court No. 1',
+          body:
+              'Urgent admission matters listed before the Hon\'ble Chief Justice Bench. Hybrid hearings begin at 10:30 AM in Court Room 1.',
+          attachmentKey: 'Cause_list.pdf',
+          revision: 1,
+          createdAt: now.subtract(const Duration(hours: 2)),
+        ),
+      ];
+    } else if (channelId.contains('saket')) {
+      return [
+        CourtAnnouncement(
+          id: 'ann_saket_1',
+          title: 'E-Filing Portal Maintenance',
+          body:
+              'The district court e-filing facility will undergo scheduled server updates from 8:00 PM to 11:00 PM this Saturday.',
+          attachmentKey: null,
+          revision: 1,
+          createdAt: now.subtract(const Duration(hours: 3)),
+        ),
+        CourtAnnouncement(
+          id: 'ann_saket_2',
+          title: 'Court Room Reallocation Notice',
+          body:
+              'Court No. 304 presided by ADJ-02 is temporarily shifted to 4th Floor Room 412 due to renovation work.',
+          attachmentKey: 'Relocation_Notice.pdf',
+          revision: 1,
+          createdAt: now.subtract(const Duration(hours: 4)),
+        ),
+      ];
+    }
+    return [
+      CourtAnnouncement(
+        id: 'ann_gen_1',
+        title: 'National Lok Adalat Schedule',
+        body:
+            'Special benches for pre-litigation and pending compoundable matters will convene on the upcoming second Saturday.',
+        attachmentKey: 'Lok_Adalat_Notice.pdf',
+        revision: 1,
+        createdAt: now.subtract(const Duration(hours: 5)),
+      ),
+    ];
   }
 }
