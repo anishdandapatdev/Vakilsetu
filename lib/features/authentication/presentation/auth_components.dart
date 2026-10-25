@@ -596,6 +596,134 @@ class CurvedDropdownField extends StatelessWidget {
   }
 }
 
+/// Curved password input field with visibility toggle icon and pill stadium design.
+class CurvedPasswordField extends StatefulWidget {
+  final TextEditingController controller;
+  final String label;
+  final String hint;
+  final String? Function(String?)? validator;
+  final FocusNode? focusNode;
+
+  const CurvedPasswordField({
+    super.key,
+    required this.controller,
+    required this.label,
+    required this.hint,
+    this.validator,
+    this.focusNode,
+  });
+
+  @override
+  State<CurvedPasswordField> createState() => _CurvedPasswordFieldState();
+}
+
+class _CurvedPasswordFieldState extends State<CurvedPasswordField> {
+  bool _obscure = true;
+
+  @override
+  Widget build(BuildContext context) {
+    return FormField<String>(
+      validator: (v) => widget.validator != null ? widget.validator!(widget.controller.text) : null,
+      initialValue: widget.controller.text,
+      builder: (state) {
+        final hasError = state.hasError;
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              height: 64,
+              padding: const EdgeInsets.only(left: 20, right: 8),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(32),
+                border: Border.all(
+                  color: hasError ? const Color(0xFFE53935) : const Color(0xFFCBD5E1),
+                  width: hasError ? 1.4 : 1.2,
+                ),
+                boxShadow: const [
+                  BoxShadow(
+                    color: Color(0x06000000),
+                    blurRadius: 8,
+                    offset: Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.lock_outline_rounded, color: slateBlue, size: 20),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          widget.label,
+                          style: const TextStyle(
+                            color: Color(0xFF94A3B8),
+                            fontSize: 11,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                        const SizedBox(height: 1),
+                        TextField(
+                          controller: widget.controller,
+                          focusNode: widget.focusNode,
+                          obscureText: _obscure,
+                          onChanged: (val) => state.didChange(val),
+                          style: const TextStyle(
+                            color: ink,
+                            fontSize: 15,
+                            fontWeight: FontWeight.w600,
+                          ),
+                          decoration: InputDecoration(
+                            isDense: true,
+                            contentPadding: EdgeInsets.zero,
+                            border: InputBorder.none,
+                            enabledBorder: InputBorder.none,
+                            focusedBorder: InputBorder.none,
+                            hintText: widget.hint,
+                            hintStyle: const TextStyle(
+                              color: Color(0xFFCBD5E1),
+                              fontSize: 15,
+                              fontWeight: FontWeight.w400,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    icon: Icon(
+                      _obscure ? Icons.visibility_outlined : Icons.visibility_off_outlined,
+                      color: slateBlue,
+                      size: 20,
+                    ),
+                    onPressed: () => setState(() => _obscure = !_obscure),
+                  ),
+                ],
+              ),
+            ),
+            if (hasError)
+              Padding(
+                padding: const EdgeInsets.only(left: 20, top: 6),
+                child: Text(
+                  state.errorText ?? '',
+                  style: const TextStyle(
+                    color: Color(0xFFE53935),
+                    fontSize: 11,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+
 /// Primary action button for Auth styled with full curved pill shape (radius 32)
 /// and vibrant blue color (Color(0xFF005CEE)) matching Image 2.
 class AuthPrimaryButton extends StatelessWidget {

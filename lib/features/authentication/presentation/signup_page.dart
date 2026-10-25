@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import '../../../app/demo_store.dart';
 import '../../../design_system/ui.dart';
 import '../../profile/data/firebase_profile_repository.dart';
 import '../../profile/domain/advocate_profile.dart';
@@ -24,26 +23,24 @@ class SignUpPage extends StatefulWidget {
 
 class _SignUpPageState extends State<SignUpPage> {
   final _accountFormKey = GlobalKey<FormState>();
-  final _profileFormKey = GlobalKey<FormState>();
+  final _passwordFormKey = GlobalKey<FormState>();
 
   final _fullName = TextEditingController();
   final _phone = TextEditingController();
-  final _enrollment = TextEditingController();
-  final _practiceAreas = TextEditingController(text: 'Civil Litigation · Corporate Law');
   final _otp = TextEditingController();
   final _otpFocus = FocusNode();
+  final _password = TextEditingController();
+  final _confirmPassword = TextEditingController();
 
   // Steps:
-  // 0: Account Details (Phone or Google)
-  // 1: Phone OTP Verification
-  // 2: Advocate Bar Profile Setup
-  // 3: Submitted / Verification Confirmation
+  // 0: Full Legal Name & Mobile Number
+  // 1: Phone OTP Verification (Code: 123456)
+  // 2: Create Password & Enter Home Screen
   int _step = 0;
   bool _loading = false;
   bool _googleLoading = false;
   int _seconds = 30;
   Timer? _timer;
-  String _selectedCourt = courts.first;
   String? _challengeId;
   AuthRepository? _activeRepository;
 
@@ -59,15 +56,11 @@ class _SignUpPageState extends State<SignUpPage> {
     _timer?.cancel();
     _otp.removeListener(_refreshOtp);
     _otpFocus.dispose();
-    for (final c in [
-      _fullName,
-      _phone,
-      _enrollment,
-      _practiceAreas,
-      _otp,
-    ]) {
-      c.dispose();
-    }
+    _fullName.dispose();
+    _phone.dispose();
+    _otp.dispose();
+    _password.dispose();
+    _confirmPassword.dispose();
     super.dispose();
   }
 
@@ -148,7 +141,7 @@ class _SignUpPageState extends State<SignUpPage> {
       await apiRepo.verifyOtp(_challengeId!, _otp.text.trim());
       _activeRepository = apiRepo;
       if (!mounted) return;
-      toast(context, 'Phone number verified!');
+      toast(context, 'Phone number verified! Now set your password.');
       setState(() => _step = 2);
     });
   }
@@ -163,6 +156,40 @@ class _SignUpPageState extends State<SignUpPage> {
       _startCountdown();
       _otpFocus.requestFocus();
       toast(context, 'OTP resent!');
+    });
+  }
+
+  Future<void> _createPasswordAndEnter() async {
+    if (!(_passwordFormKey.currentState?.validate() ?? false)) return;
+
+    await _runAction(() async {
+      final phoneText = '+91${_phone.text.trim()}';
+      final apiRepo = _getApiRepo();
+
+      await apiRepo.createPassword(
+        phoneNumber: phoneText,
+        password: _password.text.trim(),
+        fullName: _fullName.text.trim(),
+      );
+      _activeRepository = apiRepo;
+
+      try {
+        final firestoreRepo = FirebaseProfileRepository();
+        await firestoreRepo.save(
+          ProfileUpdate(
+            fullName: _fullName.text.trim(),
+            enrollmentNumber: 'PENDING',
+            primaryCourtId: 'delhi_high_court',
+            practiceAreas: 'Civil Litigation · Corporate Law',
+          ),
+        );
+      } catch (e) {
+        debugPrint('Profile sync note: $e');
+      }
+
+      if (!mounted) return;
+      toast(context, 'Account created successfully! Welcome to VakilSetu.');
+      _enterApp();
     });
   }
 
@@ -181,38 +208,12 @@ class _SignUpPageState extends State<SignUpPage> {
 
       if (!mounted) return;
       toast(context, 'Google account linked!');
-      // Proceed to Advocate Profile step to collect Bar Council details
-      setState(() => _step = 2);
+      _enterApp();
     } catch (e) {
       if (mounted) toast(context, 'Google Sign-Up failed: $e');
     } finally {
       if (mounted) setState(() => _googleLoading = false);
     }
-  }
-
-  Future<void> _completeRegistration() async {
-    if (!(_profileFormKey.currentState?.validate() ?? false)) return;
-
-    await _runAction(() async {
-      try {
-        final firestoreRepo = FirebaseProfileRepository();
-        final courtIds = await firestoreRepo.listCourtIdsByName();
-        final courtId = courtIds[_selectedCourt] ?? 'delhi_high_court';
-
-        await firestoreRepo.save(
-          ProfileUpdate(
-            fullName: _fullName.text.trim(),
-            enrollmentNumber: _enrollment.text.trim(),
-            primaryCourtId: courtId,
-            practiceAreas: _practiceAreas.text.trim(),
-          ),
-        );
-      } catch (e) {
-        debugPrint('Profile save error note: $e');
-      }
-
-      if (mounted) setState(() => _step = 3);
-    });
   }
 
   @override
@@ -272,7 +273,7 @@ class _SignUpPageState extends State<SignUpPage> {
                 ? () {
                     setState(() {
                       if (_step == 2) {
-                        _step = 0;
+                        _step = 1;
                       } else if (_step == 1) {
                         _step = 0;
                       }
@@ -281,14 +282,11 @@ class _SignUpPageState extends State<SignUpPage> {
                 : (Navigator.of(context).canPop()
                     ? () => Navigator.of(context).pop()
                     : null),
-            onAction: _step == 2 ? () => setState(() => _step = 3) : null,
-            actionLabel: _step == 2 ? 'Skip for now' : null,
           ),
           const SizedBox(height: 20),
           if (_step == 0) _buildAccountDetailsForm(),
           if (_step == 1) _buildOtpForm(),
-          if (_step == 2) _buildAdvocateProfileForm(),
-          if (_step == 3) _buildSuccessView(),
+          if (_step == 2) _buildCreatePasswordForm(),
         ],
       ),
     );
@@ -341,7 +339,13 @@ class _SignUpPageState extends State<SignUpPage> {
             loading: _loading,
             onPressed: _sendOtp,
           ),
-          const SizedBox(height: 22),
+          const SizedBox(height: 10),
+          const Text(
+            'Demo: Use 9999999999 with OTP 123456',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: muted, fontSize: 11),
+          ),
+          const SizedBox(height: 18),
           Row(
             children: [
               const Expanded(child: Divider()),
@@ -359,13 +363,13 @@ class _SignUpPageState extends State<SignUpPage> {
               const Expanded(child: Divider()),
             ],
           ),
-          const SizedBox(height: 22),
+          const SizedBox(height: 18),
           GoogleSignInButton(
             onPressed: _signUpWithGoogle,
             loading: _googleLoading,
             label: 'Sign up with Google',
           ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 22),
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
@@ -440,12 +444,12 @@ class _SignUpPageState extends State<SignUpPage> {
                         alignment: Alignment.center,
                         decoration: BoxDecoration(
                           color: Colors.white,
-                          borderRadius: BorderRadius.circular(10),
+                          borderRadius: BorderRadius.circular(12),
                           border: Border.all(
                             color: i == _otp.text.length
-                                ? const Color(0xFF0870E4)
+                                ? const Color(0xFF005CEE)
                                 : line,
-                            width: i == _otp.text.length ? 2 : 1,
+                            width: i == _otp.text.length ? 1.8 : 1,
                           ),
                         ),
                         child: Text(
@@ -480,7 +484,7 @@ class _SignUpPageState extends State<SignUpPage> {
         const Text(
           'Didn’t receive the code?',
           textAlign: TextAlign.center,
-          style: TextStyle(color: slateBlue, fontSize: 12),
+          style: TextStyle(color: slateBlue, fontSize: 11),
         ),
         TextButton(
           onPressed: _seconds > 0 || _loading || _googleLoading ? null : _resendOtp,
@@ -506,225 +510,61 @@ class _SignUpPageState extends State<SignUpPage> {
     );
   }
 
-  Widget _buildAdvocateProfileForm() {
+  Widget _buildCreatePasswordForm() {
     return Form(
-      key: _profileFormKey,
+      key: _passwordFormKey,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           const AuthTitle(
-            eyebrow: 'Professional Credentials',
-            title: 'Advocate Profile',
-            subtitle: 'Complete your Bar Council profile details',
+            eyebrow: 'Step 3 of 3',
+            title: 'Create Password',
+            subtitle: 'Set a password to secure your account and sign in anytime',
           ),
-          const SizedBox(height: 20),
-          Center(
-            child: Stack(
-              alignment: Alignment.bottomRight,
-              children: [
-                Avatar(
-                  _fullName.text.isNotEmpty
-                      ? _fullName.text
-                          .trim()
-                          .split(' ')
-                          .map((e) => e.isNotEmpty ? e[0] : '')
-                          .take(2)
-                          .join()
-                          .toUpperCase()
-                      : 'AK',
-                  size: 88,
-                ),
-                Container(
-                  padding: const EdgeInsets.all(7),
-                  decoration: const BoxDecoration(
-                    color: Color(0xFF0870E4),
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(
-                    Icons.camera_alt_rounded,
-                    color: Colors.white,
-                    size: 16,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 18),
-          CurvedInputField(
-            controller: _fullName,
-            label: 'Full Legal Name *',
-            hint: 'Advocate full legal name',
-            prefixIcon: Icons.person_outline_rounded,
-            textCapitalization: TextCapitalization.words,
+          const SizedBox(height: 24),
+          CurvedPasswordField(
+            controller: _password,
+            label: 'Create Password *',
+            hint: 'At least 6 characters',
             validator: (v) =>
-                (v ?? '').trim().length >= 3 ? null : 'Enter your full name.',
+                (v ?? '').trim().length >= 6 ? null : 'Password must be at least 6 characters.',
           ),
-          const SizedBox(height: 14),
-          CurvedInputField(
-            controller: _enrollment,
-            label: 'Bar Council Enrollment No. *',
-            hint: 'e.g. D/1234/2020 or MAH/5678/2018',
-            prefixIcon: Icons.badge_outlined,
-            textCapitalization: TextCapitalization.characters,
-            validator: (v) => (v ?? '').trim().isNotEmpty
-                ? null
-                : 'Enter your Bar Council enrollment number.',
-          ),
-          const SizedBox(height: 14),
-          CurvedDropdownField(
-            label: 'Primary Practice Court *',
-            value: _selectedCourt,
-            items: courts,
-            prefixIcon: Icons.account_balance_outlined,
-            onChanged: (value) {
-              if (value != null) setState(() => _selectedCourt = value);
+          const SizedBox(height: 16),
+          CurvedPasswordField(
+            controller: _confirmPassword,
+            label: 'Confirm Password *',
+            hint: 'Re-enter your password',
+            validator: (v) {
+              if ((v ?? '').trim().isEmpty) return 'Confirm your password.';
+              if (v!.trim() != _password.text.trim()) return 'Passwords do not match.';
+              return null;
             },
           ),
           const SizedBox(height: 14),
-          CurvedInputField(
-            controller: _practiceAreas,
-            label: 'Practice Areas',
-            hint: 'e.g. Civil Litigation, Constitutional Law, NCLT',
-            prefixIcon: Icons.gavel_rounded,
-          ),
-          const SizedBox(height: 16),
-          const Surface(
+          Surface(
             color: paleBlue,
-            padding: EdgeInsets.all(12),
+            padding: const EdgeInsets.all(12),
             child: Row(
               children: [
-                Icon(Icons.verified_user_outlined, color: Color(0xFF0870E4), size: 18),
-                SizedBox(width: 10),
+                const Icon(Icons.shield_outlined, color: Color(0xFF005CEE), size: 20),
+                const SizedBox(width: 10),
                 Expanded(
                   child: Text(
-                    'Your enrollment number will be verified with the official Bar Council roster. Verified badges are granted post review.',
-                    style: TextStyle(color: slateBlue, fontSize: 11, height: 1.35),
+                    'Your password will be used along with +91 ${_phone.text} to sign in to VakilSetu securely.',
+                    style: const TextStyle(color: slateBlue, fontSize: 11, height: 1.35),
                   ),
                 ),
               ],
             ),
           ),
-          const SizedBox(height: 22),
+          const SizedBox(height: 26),
           AuthPrimaryButton(
-            label: _loading ? 'Registering…' : 'Submit & Complete Registration',
+            label: _loading ? 'Creating Account…' : 'Create Password & Enter Home',
             loading: _loading,
-            onPressed: _completeRegistration,
+            onPressed: _createPasswordAndEnter,
           ),
         ],
       ),
     );
   }
-
-  Widget _buildSuccessView() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        const SizedBox(height: 35),
-        Center(
-          child: Container(
-            width: 110,
-            height: 110,
-            decoration: const BoxDecoration(
-              color: paleBlue,
-              shape: BoxShape.circle,
-            ),
-            child: const Stack(
-              alignment: Alignment.center,
-              children: [
-                Icon(Icons.badge_outlined, color: Color(0xFF0870E4), size: 64),
-                Positioned(
-                  right: 6,
-                  bottom: 6,
-                  child: CircleAvatar(
-                    radius: 20,
-                    backgroundColor: teal,
-                    child: Icon(Icons.check_rounded, color: Colors.white, size: 24),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-        const SizedBox(height: 24),
-        Text(
-          'Registration Submitted!',
-          textAlign: TextAlign.center,
-          style: heading(22),
-        ),
-        const SizedBox(height: 8),
-        Text(
-          'Welcome to VakilSetu, ${_fullName.text.trim().isNotEmpty ? _fullName.text.trim() : "Advocate"}!\nYour profile is queued for Bar Council verification.',
-          textAlign: TextAlign.center,
-          style: const TextStyle(color: slateBlue, fontSize: 12, height: 1.5),
-        ),
-        const SizedBox(height: 26),
-        const Surface(
-          color: paleBlue,
-          child: Column(
-            children: [
-              _StatusItem(
-                Icons.schedule_rounded,
-                'Bar verification in progress',
-                'Our verification desk checks your enrollment details with the Bar Council.',
-              ),
-              SizedBox(height: 16),
-              _StatusItem(
-                Icons.verified_user_outlined,
-                'Verified Advocate Badge',
-                'Unlocked upon confirmation to boost credibility across the network.',
-              ),
-              SizedBox(height: 16),
-              _StatusItem(
-                Icons.groups_outlined,
-                'Instant Access',
-                'Start exploring court rooms, cause lists, and legal channels immediately.',
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 28),
-        AuthPrimaryButton(
-          label: 'Enter Dashboard',
-          onPressed: _enterApp,
-        ),
-      ],
-    );
-  }
-}
-
-class _StatusItem extends StatelessWidget {
-  final IconData icon;
-  final String title;
-  final String description;
-
-  const _StatusItem(this.icon, this.title, this.description);
-
-  @override
-  Widget build(BuildContext context) => Row(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      Icon(icon, color: teal, size: 20),
-      const SizedBox(width: 12),
-      Expanded(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              title,
-              style: const TextStyle(
-                color: navy,
-                fontSize: 12,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            const SizedBox(height: 2),
-            Text(
-              description,
-              style: const TextStyle(color: slateBlue, fontSize: 11, height: 1.3),
-            ),
-          ],
-        ),
-      ),
-    ],
-  );
 }

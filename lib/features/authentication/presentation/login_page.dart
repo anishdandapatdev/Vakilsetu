@@ -29,17 +29,19 @@ class LoginPage extends StatefulWidget {
 class _LoginPageState extends State<LoginPage> {
   final _formKey = GlobalKey<FormState>();
   final _phoneController = TextEditingController();
+  final _passwordController = TextEditingController();
   final _otpController = TextEditingController();
   final _otpFocus = FocusNode();
 
   // Steps:
   // 0: Welcome splash on mobile (if showWelcome is true)
-  // 1: Phone input form
+  // 1: Phone + Password input form (or OTP toggle)
   // 2: Phone OTP verification
   late int _step;
   int _seconds = 30;
   bool _loading = false;
   bool _googleLoading = false;
+  bool _useOtpLogin = false;
   Timer? _timer;
   AuthRepository? _repository;
   String? _challengeId;
@@ -58,6 +60,7 @@ class _LoginPageState extends State<LoginPage> {
     _otpController.removeListener(_refreshOtp);
     _otpFocus.dispose();
     _phoneController.dispose();
+    _passwordController.dispose();
     _otpController.dispose();
     super.dispose();
   }
@@ -101,6 +104,19 @@ class _LoginPageState extends State<LoginPage> {
       return _repository! as ApiAuthRepository;
     }
     return ApiAuthRepository();
+  }
+
+  Future<void> _signInWithPassword() async {
+    if (!(_formKey.currentState?.validate() ?? false)) return;
+
+    await _runAction(() async {
+      final phoneText = '+91${_phoneController.text.trim()}';
+      final apiRepo = _getApiRepo();
+      await apiRepo.signInWithPassword(phoneText, _passwordController.text.trim());
+      if (!mounted) return;
+      toast(context, 'Signed in successfully!');
+      _enterApp(apiRepo);
+    });
   }
 
   Future<void> _sendOtp() async {
@@ -238,38 +254,83 @@ class _LoginPageState extends State<LoginPage> {
   Widget _buildPhoneLoginForm() => Column(
     crossAxisAlignment: CrossAxisAlignment.stretch,
     children: [
-      const AuthTitle(
+      AuthTitle(
         eyebrow: 'Welcome Back',
         title: 'Sign In',
-        subtitle: 'Enter your mobile number to receive a secure OTP code',
+        subtitle: _useOtpLogin
+            ? 'Enter your mobile number to receive a secure OTP code'
+            : 'Enter your mobile number and password to sign in',
       ),
-      const SizedBox(height: 28),
+      const SizedBox(height: 24),
       CurvedPhoneInputField(
         controller: _phoneController,
         validator: (v) => RegExp(r'^\d{10}$').hasMatch(v ?? '')
             ? null
             : 'Enter a valid 10-digit mobile number.',
       ),
-      const SizedBox(height: 10),
-      const Row(
+      if (!_useOtpLogin) ...[
+        const SizedBox(height: 16),
+        CurvedPasswordField(
+          controller: _passwordController,
+          label: 'Password *',
+          hint: 'Enter your password',
+          validator: (v) =>
+              (v ?? '').trim().isNotEmpty ? null : 'Enter your account password.',
+        ),
+      ],
+      const SizedBox(height: 12),
+      Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Icon(Icons.shield_outlined, color: slateBlue, size: 14),
-          SizedBox(width: 8),
-          Expanded(
+          InkWell(
+            onTap: () {
+              setState(() {
+                _useOtpLogin = !_useOtpLogin;
+              });
+            },
             child: Text(
-              'A 6-digit verification code will be sent via SMS',
-              style: TextStyle(color: slateBlue, fontSize: 11),
+              _useOtpLogin ? 'Sign in with Password instead' : 'Sign in with OTP instead',
+              style: const TextStyle(
+                color: Color(0xFF005CEE),
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+              ),
             ),
           ),
+          if (!_useOtpLogin)
+            InkWell(
+              onTap: () {
+                setState(() {
+                  _useOtpLogin = true;
+                });
+                _sendOtp();
+              },
+              child: const Text(
+                'Forgot password?',
+                style: TextStyle(
+                  color: slateBlue,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
         ],
       ),
-      const SizedBox(height: 24),
-      AuthPrimaryButton(
-        label: _loading ? 'Sending OTP…' : 'Send OTP',
-        loading: _loading,
-        onPressed: _sendOtp,
-      ),
       const SizedBox(height: 22),
+      AuthPrimaryButton(
+        label: _loading
+            ? (_useOtpLogin ? 'Sending OTP…' : 'Signing In…')
+            : (_useOtpLogin ? 'Send OTP' : 'Sign In'),
+        loading: _loading,
+        onPressed: _useOtpLogin ? _sendOtp : _signInWithPassword,
+      ),
+      const SizedBox(height: 10),
+      const Text(
+        'Demo credentials: 9999999999 with OTP 123456 or Pass 123456',
+        textAlign: TextAlign.center,
+        style: TextStyle(color: muted, fontSize: 11),
+      ),
+      const SizedBox(height: 20),
       Row(
         children: [
           const Expanded(child: Divider()),
@@ -287,13 +348,13 @@ class _LoginPageState extends State<LoginPage> {
           const Expanded(child: Divider()),
         ],
       ),
-      const SizedBox(height: 22),
+      const SizedBox(height: 20),
       GoogleSignInButton(
         onPressed: _signInWithGoogle,
         loading: _googleLoading,
         label: 'Sign in with Google',
       ),
-      const SizedBox(height: 24),
+      const SizedBox(height: 22),
       Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
@@ -365,10 +426,10 @@ class _LoginPageState extends State<LoginPage> {
                       alignment: Alignment.center,
                       decoration: BoxDecoration(
                         color: Colors.white,
-                        borderRadius: BorderRadius.circular(9),
+                        borderRadius: BorderRadius.circular(12),
                         border: Border.all(
                           color: i == _otpController.text.length
-                              ? const Color(0xFF0870E4)
+                              ? const Color(0xFF005CEE)
                               : line,
                           width: i == _otpController.text.length ? 1.8 : 1,
                         ),
@@ -424,10 +485,10 @@ class _LoginPageState extends State<LoginPage> {
         onPressed: _verifyOtp,
       ),
       const SizedBox(height: 10),
-      Text(
+      const Text(
         'Development backend code: 123456',
         textAlign: TextAlign.center,
-        style: const TextStyle(color: muted, fontSize: 11),
+        style: TextStyle(color: muted, fontSize: 11),
       ),
     ],
   );

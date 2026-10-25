@@ -5,6 +5,7 @@ abstract interface class AuthRepository {
   Future<String> requestOtp(String phoneNumber);
   Future<SessionIdentity> verifyOtp(String challengeId, String code);
   Future<SessionIdentity> signInWithEmail(String email, String password);
+  Future<SessionIdentity> signInWithPassword(String phoneNumber, String password);
   Future<SessionIdentity?> restoreSession();
 
   /// Account authentication does not grant access to earlier encryption keys.
