@@ -49,6 +49,8 @@ class _DashboardState extends State<Dashboard> {
   @override
   void initState() {
     super.initState();
+    rooms = widget.store.rooms;
+    notices = widget.store.notices;
     _refresh();
     _subscribeSync();
   }
@@ -219,172 +221,175 @@ class _DashboardState extends State<Dashboard> {
           color: _ice,
           child: SafeArea(
             bottom: false,
-            child: RefreshIndicator(
-              color: _royal,
-              onRefresh: _refresh,
-              child: CustomScrollView(
-                physics: const AlwaysScrollableScrollPhysics(),
-                slivers: [
-                  SliverPersistentHeader(
-                    pinned: true,
-                    delegate: StickyBrandSearchHeader(
-                      initials: headerInitials,
-                      search: _Search(onSearch: widget.onSearch),
-                      onAvatarTap: () => widget.onNavigate(6),
-                    ),
+            child: Column(
+              children: [
+                Padding(
+                  padding: EdgeInsets.fromLTRB(horizontal, 8, horizontal, 8),
+                  child: BrandedTopBar(
+                    initials: headerInitials,
+                    onAvatarTap: () => widget.onNavigate(6),
                   ),
-              SliverPadding(
-                padding: EdgeInsets.fromLTRB(
-                  horizontal,
-                  compact ? 8 : 16,
-                  horizontal,
-                  compact ? 100 : 38,
                 ),
-                sliver: SliverToBoxAdapter(
-                  child: Align(
-                    alignment: Alignment.topCenter,
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 1240),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          const SizedBox(height: 18),
-                          _CourtHighlights(
-                            onOpen: () => widget.onNavigate(3),
-                            channels: (channels != null && channels!.isNotEmpty)
-                                ? channels
-                                : null,
-                          ),
-                          const SizedBox(height: 16),
-                          if ((widget.messagingRepository != null &&
-                                  rooms == null) ||
-                              (widget.messagingRepository is ServerMessaging &&
-                                  documents == null) ||
-                              (widget.courtRepository != null &&
-                                  notices == null))
-                            const LinearProgressIndicator(minHeight: 2),
-                          if (loadError != null) ...[
-                            Text(
-                              loadError!,
-                              style: const TextStyle(
-                                color: muted,
-                                fontSize: 11,
+                Padding(
+                  padding: EdgeInsets.fromLTRB(horizontal, 0, horizontal, 8),
+                  child: _Search(onSearch: widget.onSearch),
+                ),
+                Expanded(
+                  child: RefreshIndicator(
+                    color: _royal,
+                    onRefresh: _refresh,
+                    child: SingleChildScrollView(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      padding: EdgeInsets.fromLTRB(
+                        horizontal,
+                        compact ? 4 : 8,
+                        horizontal,
+                        compact ? 100 : 38,
+                      ),
+                      child: Align(
+                        alignment: Alignment.topCenter,
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 1240),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              const SizedBox(height: 10),
+                              _CourtHighlights(
+                                onOpen: () => widget.onNavigate(3),
+                                channels: (channels != null && channels!.isNotEmpty)
+                                    ? channels
+                                    : null,
                               ),
-                            ),
-                            TextButton(
-                              onPressed: _refresh,
-                              child: const Text('Retry'),
-                            ),
-                          ],
-                          _Metrics(
-                            store: widget.store,
-                            rooms: (rooms != null && rooms!.isNotEmpty)
-                                ? rooms
-                                : widget.store.rooms,
-                            courtUpdateCount: (notices != null && notices!.isNotEmpty)
-                                ? notices!.length
-                                : widget.store.notices.length,
-                            onNavigate: widget.onNavigate,
-                          ),
-                          const SizedBox(height: 22),
-                          _HomeSection(
-                            title: 'Quick Access',
-                            onSeeAll: () => widget.onNavigate(2),
-                            child: _QuickAccess(onNavigate: widget.onNavigate),
-                          ),
-                          const SizedBox(height: 22),
-                          if (compact) ...[
-                            _Conversations(
-                              rooms: (rooms != null && rooms!.isNotEmpty)
-                                  ? rooms!
-                                  : widget.store.rooms,
-                              onChat: widget.onChat,
-                              onAll: () => widget.onNavigate(1),
-                            ),
-                            const SizedBox(height: 22),
-                            _CourtUpdates(
-                              notices: (notices != null && notices!.isNotEmpty)
-                                  ? notices!
-                                  : widget.store.notices,
-                              sample: notices == null || notices!.isEmpty,
-                              onAll: () => widget.onNavigate(3),
-                            ),
-                            const SizedBox(height: 22),
-                            _Groups(
-                              rooms: (rooms != null && rooms!.isNotEmpty)
-                                  ? rooms!
-                                  : widget.store.rooms,
-                              onChat: widget.onChat,
-                              onAll: () => widget.onNavigate(4),
-                            ),
-                            const SizedBox(height: 22),
-                            _Documents(
-                              onAll: () => widget.onNavigate(5),
-                              documents: (documents != null && documents!.isNotEmpty)
-                                  ? documents
-                                  : null,
-                              onDownload: _download,
-                            ),
-                          ] else ...[
-                            Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Expanded(
-                                  flex: 6,
-                                  child: Column(
-                                    children: [
-                                      _Conversations(
-                                        rooms: (rooms != null && rooms!.isNotEmpty)
-                                            ? rooms!
-                                            : widget.store.rooms,
-                                        onChat: widget.onChat,
-                                        onAll: () => widget.onNavigate(1),
-                                      ),
-                                      const SizedBox(height: 22),
-                                      _Groups(
-                                        rooms: (rooms != null && rooms!.isNotEmpty)
-                                            ? rooms!
-                                            : widget.store.rooms,
-                                        onChat: widget.onChat,
-                                        onAll: () => widget.onNavigate(4),
-                                      ),
-                                    ],
+                              const SizedBox(height: 16),
+                              if ((widget.messagingRepository != null &&
+                                      rooms == null) ||
+                                  (widget.messagingRepository is ServerMessaging &&
+                                      documents == null) ||
+                                  (widget.courtRepository != null &&
+                                      notices == null))
+                                const LinearProgressIndicator(minHeight: 2),
+                              if (loadError != null) ...[
+                                Text(
+                                  loadError!,
+                                  style: const TextStyle(
+                                    color: muted,
+                                    fontSize: 11,
                                   ),
                                 ),
-                                const SizedBox(width: 22),
-                                Expanded(
-                                  flex: 5,
-                                  child: Column(
-                                    children: [
-                                      _CourtUpdates(
-                                        notices: (notices != null && notices!.isNotEmpty)
-                                            ? notices!
-                                            : widget.store.notices,
-                                        sample: notices == null || notices!.isEmpty,
-                                        onAll: () => widget.onNavigate(3),
-                                      ),
-                                      const SizedBox(height: 22),
-                                      _Documents(
-                                        onAll: () => widget.onNavigate(5),
-                                        documents: (documents != null && documents!.isNotEmpty)
-                                            ? documents
-                                            : null,
-                                        onDownload: _download,
-                                      ),
-                                    ],
-                                  ),
+                                TextButton(
+                                  onPressed: _refresh,
+                                  child: const Text('Retry'),
                                 ),
                               ],
-                            ),
-                          ],
-                        ],
+                              _Metrics(
+                                store: widget.store,
+                                rooms: (rooms != null && rooms!.isNotEmpty)
+                                    ? rooms
+                                    : widget.store.rooms,
+                                courtUpdateCount: (notices != null && notices!.isNotEmpty)
+                                    ? notices!.length
+                                    : widget.store.notices.length,
+                                onNavigate: widget.onNavigate,
+                              ),
+                              const SizedBox(height: 22),
+                              _HomeSection(
+                                title: 'Quick Access',
+                                onSeeAll: () => widget.onNavigate(2),
+                                child: _QuickAccess(onNavigate: widget.onNavigate),
+                              ),
+                              const SizedBox(height: 22),
+                              if (compact) ...[
+                                _Conversations(
+                                  rooms: (rooms != null && rooms!.isNotEmpty)
+                                      ? rooms!
+                                      : widget.store.rooms,
+                                  onChat: widget.onChat,
+                                  onAll: () => widget.onNavigate(1),
+                                ),
+                                const SizedBox(height: 22),
+                                _CourtUpdates(
+                                  notices: (notices != null && notices!.isNotEmpty)
+                                      ? notices!
+                                      : widget.store.notices,
+                                  sample: notices == null || notices!.isEmpty,
+                                  onAll: () => widget.onNavigate(3),
+                                ),
+                                const SizedBox(height: 22),
+                                _Groups(
+                                  rooms: (rooms != null && rooms!.isNotEmpty)
+                                      ? rooms!
+                                      : widget.store.rooms,
+                                  onChat: widget.onChat,
+                                  onAll: () => widget.onNavigate(4),
+                                ),
+                                const SizedBox(height: 22),
+                                _Documents(
+                                  onAll: () => widget.onNavigate(5),
+                                  documents: (documents != null && documents!.isNotEmpty)
+                                      ? documents
+                                      : null,
+                                  onDownload: _download,
+                                ),
+                              ] else ...[
+                                Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Expanded(
+                                      flex: 6,
+                                      child: Column(
+                                        children: [
+                                          _Conversations(
+                                            rooms: (rooms != null && rooms!.isNotEmpty)
+                                                ? rooms!
+                                                : widget.store.rooms,
+                                            onChat: widget.onChat,
+                                            onAll: () => widget.onNavigate(1),
+                                          ),
+                                          const SizedBox(height: 22),
+                                          _Groups(
+                                            rooms: (rooms != null && rooms!.isNotEmpty)
+                                                ? rooms!
+                                                : widget.store.rooms,
+                                            onChat: widget.onChat,
+                                            onAll: () => widget.onNavigate(4),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    const SizedBox(width: 22),
+                                    Expanded(
+                                      flex: 5,
+                                      child: Column(
+                                        children: [
+                                          _CourtUpdates(
+                                            notices: (notices != null && notices!.isNotEmpty)
+                                                ? notices!
+                                                : widget.store.notices,
+                                            sample: notices == null || notices!.isEmpty,
+                                            onAll: () => widget.onNavigate(3),
+                                          ),
+                                          const SizedBox(height: 22),
+                                          _Documents(
+                                            onAll: () => widget.onNavigate(5),
+                                            documents: (documents != null && documents!.isNotEmpty)
+                                                ? documents
+                                                : null,
+                                            onDownload: _download,
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
                       ),
                     ),
                   ),
                 ),
-              ),
-                ],
-              ),
+              ],
             ),
           ),
         );

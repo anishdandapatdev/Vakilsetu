@@ -351,41 +351,43 @@ class _CourtRoomsPageState extends State<CourtRoomsPage> {
       color: canvas,
       child: SafeArea(
         bottom: false,
-        child: RefreshIndicator(
-          color: const Color(0xFF0870E4),
-          onRefresh: () async {
-            await _loadCourts();
-          },
-          child: CustomScrollView(
-            physics: const AlwaysScrollableScrollPhysics(),
-            slivers: [
-              SliverPersistentHeader(
-                pinned: true,
-                delegate: StickyBrandSearchHeader(
-                  initials: headerInitials,
-                  onAvatarTap: widget.onProfile,
-                  search: UniversalSearchCard(
-                    hint: 'Search court channels',
-                    onChanged: (value) => setState(() => query = value),
-                    onSubmitted: (value) => setState(() => query = value),
-                    trailing: IconButton(
-                      tooltip: joinedOnly
-                          ? 'Show all courts'
-                          : 'Show joined courts',
-                      onPressed: () => setState(() => joinedOnly = !joinedOnly),
-                      icon: Icon(
-                        joinedOnly
-                            ? Icons.filter_alt_rounded
-                            : Icons.tune_rounded,
-                        color: navy,
-                      ),
-                    ),
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+              child: BrandedTopBar(
+                initials: headerInitials,
+                onAvatarTap: widget.onProfile,
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+              child: UniversalSearchCard(
+                hint: 'Search court channels',
+                onChanged: (value) => setState(() => query = value),
+                onSubmitted: (value) => setState(() => query = value),
+                trailing: IconButton(
+                  tooltip: joinedOnly
+                      ? 'Show all courts'
+                      : 'Show joined courts',
+                  onPressed: () => setState(() => joinedOnly = !joinedOnly),
+                  icon: Icon(
+                    joinedOnly
+                        ? Icons.filter_alt_rounded
+                        : Icons.tune_rounded,
+                    color: navy,
                   ),
                 ),
               ),
-              SliverPadding(
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-                sliver: SliverList.list(
+            ),
+            Expanded(
+              child: RefreshIndicator(
+                color: const Color(0xFF0870E4),
+                onRefresh: () async {
+                  await _loadCourts();
+                },
+                child: ListView(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
                   children: [
                     if (loading) const LinearProgressIndicator(minHeight: 2),
                     if (error != null) ...[
@@ -416,8 +418,8 @@ class _CourtRoomsPageState extends State<CourtRoomsPage> {
                   ],
                 ),
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );

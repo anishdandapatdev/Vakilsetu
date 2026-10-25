@@ -160,132 +160,134 @@ class _DirectoryPageState extends State<DirectoryPage> {
       color: canvas,
       child: SafeArea(
         bottom: false,
-        child: RefreshIndicator(
-          color: const Color(0xFF0870E4),
-          onRefresh: () async {
-            await _loadCourtIds();
-            await _loadApi();
-          },
-          child: CustomScrollView(
-            physics: const AlwaysScrollableScrollPhysics(),
-            slivers: [
-              SliverPersistentHeader(
-                pinned: true,
-                delegate: StickyBrandSearchHeader(
-                  initials: headerInitials,
-                  onAvatarTap: widget.onProfile,
-                  search: UniversalSearchCard(
-                    initialValue: query,
-                    hint: 'Search name, enrollment or specialisation',
-                    onChanged: (value) {
-                      setState(() => query = value);
-                      _scheduleApiSearch();
-                    },
-                    onSubmitted: (value) {
-                      searchDebounce?.cancel();
-                      setState(() => query = value);
-                      _loadApi();
-                    },
-                    trailing: IconButton(
-                      tooltip: 'Filter advocates',
-                      onPressed: _showCourtFilter,
-                      icon: const Icon(Icons.tune_rounded, color: navy),
-                    ),
-                  ),
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+              child: BrandedTopBar(
+                initials: headerInitials,
+                onAvatarTap: widget.onProfile,
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+              child: UniversalSearchCard(
+                initialValue: query,
+                hint: 'Search name, enrollment or specialisation',
+                onChanged: (value) {
+                  setState(() => query = value);
+                  _scheduleApiSearch();
+                },
+                onSubmitted: (value) {
+                  searchDebounce?.cancel();
+                  setState(() => query = value);
+                  _loadApi();
+                },
+                trailing: IconButton(
+                  tooltip: 'Filter advocates',
+                  onPressed: _showCourtFilter,
+                  icon: const Icon(Icons.tune_rounded, color: navy),
                 ),
               ),
-            SliverPadding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 26),
-              sliver: SliverList.list(
-                children: [
-                  Row(
-                    children: [
-                      Text(
-                        '${results.length} advocates found',
-                        style: const TextStyle(
-                          color: slateBlue,
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      const Spacer(),
-                      PopupMenuButton<String>(
-                        initialValue: sort,
-                        onSelected: (value) => setState(() => sort = value),
-                        itemBuilder: (_) => const [
-                          PopupMenuItem(
-                            value: 'Relevance',
-                            child: Text('Relevance'),
+            ),
+            Expanded(
+              child: RefreshIndicator(
+                color: const Color(0xFF0870E4),
+                onRefresh: () async {
+                  await _loadCourtIds();
+                  await _loadApi();
+                },
+                child: ListView(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 26),
+                  children: [
+                    Row(
+                      children: [
+                        Text(
+                          '${results.length} advocates found',
+                          style: const TextStyle(
+                            color: slateBlue,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
                           ),
-                          PopupMenuItem(value: 'Name', child: Text('Name')),
-                          PopupMenuItem(value: 'Court', child: Text('Court')),
-                        ],
-                        child: Row(
-                          children: [
-                            const Text(
-                              'Sort: ',
-                              style: TextStyle(color: muted, fontSize: 11),
-                            ),
-                            Text(
-                              sort,
-                              style: const TextStyle(
-                                color: Color(0xFF0870E4),
-                                fontSize: 11,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                            const Icon(
-                              Icons.keyboard_arrow_down_rounded,
-                              size: 18,
-                              color: Color(0xFF0870E4),
-                            ),
-                          ],
                         ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-                  if (apiLoading) const LinearProgressIndicator(minHeight: 2),
-                  if (apiError != null) ...[
-                    Surface(
-                      color: paleBronze,
-                      child: Text(
-                        'Could not refresh the directory: $apiError',
-                        style: const TextStyle(color: muted, fontSize: 11),
-                      ),
+                        const Spacer(),
+                        PopupMenuButton<String>(
+                          initialValue: sort,
+                          onSelected: (value) => setState(() => sort = value),
+                          itemBuilder: (_) => const [
+                            PopupMenuItem(
+                              value: 'Relevance',
+                              child: Text('Relevance'),
+                            ),
+                            PopupMenuItem(value: 'Name', child: Text('Name')),
+                            PopupMenuItem(value: 'Court', child: Text('Court')),
+                          ],
+                          child: Row(
+                            children: [
+                              const Text(
+                                'Sort: ',
+                                style: TextStyle(color: muted, fontSize: 11),
+                              ),
+                              Text(
+                                sort,
+                                style: const TextStyle(
+                                  color: Color(0xFF0870E4),
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                              const Icon(
+                                Icons.keyboard_arrow_down_rounded,
+                                size: 18,
+                                color: Color(0xFF0870E4),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                     ),
                     const SizedBox(height: 10),
-                  ],
-                  if (results.isEmpty)
-                    const Surface(
-                      child: EmptyState(
-                        'No advocates found',
-                        'Try another name or clear the court filter.',
+                    if (apiLoading) const LinearProgressIndicator(minHeight: 2),
+                    if (apiError != null) ...[
+                      Surface(
+                        color: paleBronze,
+                        child: Text(
+                          'Could not refresh the directory: $apiError',
+                          style: const TextStyle(color: muted, fontSize: 11),
+                        ),
                       ),
-                    ),
-                  for (final advocate in results) ...[
-                    _AdvocateCard(
-                      advocate: advocate,
-                      saved: saved.contains(advocate.id),
-                      onSave: () => setState(() {
-                        saved.contains(advocate.id)
-                            ? saved.remove(advocate.id)
-                            : saved.add(advocate.id);
-                      }),
-                      onMessage: () => widget.onMessage(advocate),
-                      onProfile: () => _showProfile(advocate),
-                    ),
-                    const SizedBox(height: 11),
+                      const SizedBox(height: 10),
+                    ],
+                    if (results.isEmpty)
+                      const Surface(
+                        child: EmptyState(
+                          'No advocates found',
+                          'Try another name or clear the court filter.',
+                        ),
+                      ),
+                    for (final advocate in results) ...[
+                      _AdvocateCard(
+                        advocate: advocate,
+                        saved: saved.contains(advocate.id),
+                        onSave: () => setState(() {
+                          saved.contains(advocate.id)
+                              ? saved.remove(advocate.id)
+                              : saved.add(advocate.id);
+                        }),
+                        onMessage: () => widget.onMessage(advocate),
+                        onProfile: () => _showProfile(advocate),
+                      ),
+                      const SizedBox(height: 11),
+                    ],
                   ],
-                ],
+                ),
               ),
             ),
           ],
         ),
       ),
-    ),
-  );
-}
+    );
+  }
 
   Future<void> _showCourtFilter() async {
     final availableCourts = courtIds.isNotEmpty

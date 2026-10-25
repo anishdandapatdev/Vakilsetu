@@ -40,6 +40,8 @@ class _AppShellState extends State<AppShell> {
   bool conversationOpen = false;
   String directoryQuery = '';
   MessagingRepository? messagingRepository;
+  late final FirestoreCourtRepository courtRepository;
+  late final FirestoreAdvocatesRepository advocatesRepository;
   final labels = [
     'Home',
     'Chats',
@@ -65,6 +67,8 @@ class _AppShellState extends State<AppShell> {
     super.initState();
     selected = widget.startProfile ? 6 : 0;
     messagingRepository = FirestoreMessagingRepository();
+    courtRepository = FirestoreCourtRepository();
+    advocatesRepository = FirestoreAdvocatesRepository();
   }
 
   @override
@@ -165,8 +169,6 @@ class _AppShellState extends State<AppShell> {
     builder: (context, _) {
       final wide = MediaQuery.sizeOf(context).width >= 980;
       final store = widget.store;
-      final advocatesRepository = FirestoreAdvocatesRepository();
-      final courtRepository = FirestoreCourtRepository();
       final pages = [
         Dashboard(
           store: store,

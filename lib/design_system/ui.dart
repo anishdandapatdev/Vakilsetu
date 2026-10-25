@@ -424,30 +424,33 @@ class StickyBrandSearchHeader extends SliverPersistentHeaderDelegate {
   });
 
   @override
-  double get minExtent => 132;
+  double get minExtent => 118;
   @override
-  double get maxExtent => 132;
+  double get maxExtent => 118;
 
   @override
   Widget build(
     BuildContext context,
     double shrinkOffset,
     bool overlapsContent,
-  ) => Container(
-    color: canvas,
-    padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-    child: Column(
-      mainAxisSize: MainAxisSize.min,
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        BrandedTopBar(
-          initials: initials,
-          onAvatarTap: onAvatarTap,
-          onMenuTap: onMenuTap,
-        ),
-        const SizedBox(height: 8),
-        search,
-      ],
+  ) => SizedBox(
+    height: 118,
+    child: Container(
+      color: canvas,
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          BrandedTopBar(
+            initials: initials,
+            onAvatarTap: onAvatarTap,
+            onMenuTap: onMenuTap,
+          ),
+          const SizedBox(height: 8),
+          search,
+        ],
+      ),
     ),
   );
 
