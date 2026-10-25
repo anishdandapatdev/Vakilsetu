@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import '../../../design_system/ui.dart';
 import '../data/api_auth_repository.dart';
@@ -30,51 +29,27 @@ class _LoginPageState extends State<LoginPage> {
   final _formKey = GlobalKey<FormState>();
   final _phoneController = TextEditingController();
   final _passwordController = TextEditingController();
-  final _otpController = TextEditingController();
-  final _otpFocus = FocusNode();
 
   // Steps:
   // 0: Welcome splash on mobile (if showWelcome is true)
-  // 1: Phone + Password input form (or OTP toggle)
-  // 2: Phone OTP verification
+  // 1: Phone + Password sign-in form
   late int _step;
-  int _seconds = 30;
   bool _loading = false;
   bool _googleLoading = false;
-  bool _useOtpLogin = false;
-  Timer? _timer;
   AuthRepository? _repository;
-  String? _challengeId;
 
   @override
   void initState() {
     super.initState();
     _step = widget.showWelcome ? 0 : 1;
     _repository = widget.authRepository;
-    _otpController.addListener(_refreshOtp);
   }
 
   @override
   void dispose() {
-    _timer?.cancel();
-    _otpController.removeListener(_refreshOtp);
-    _otpFocus.dispose();
     _phoneController.dispose();
     _passwordController.dispose();
-    _otpController.dispose();
     super.dispose();
-  }
-
-  void _refreshOtp() => setState(() {});
-
-  void _startCountdown() {
-    _timer?.cancel();
-    setState(() => _seconds = 30);
-    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (!mounted) return timer.cancel();
-      setState(() => _seconds--);
-      if (_seconds <= 0) timer.cancel();
-    });
   }
 
   Future<void> _runAction(Future<void> Function() action) async {
@@ -116,50 +91,6 @@ class _LoginPageState extends State<LoginPage> {
       if (!mounted) return;
       toast(context, 'Signed in successfully!');
       _enterApp(apiRepo);
-    });
-  }
-
-  Future<void> _sendOtp() async {
-    if (!(_formKey.currentState?.validate() ?? false)) return;
-
-    await _runAction(() async {
-      final phoneText = '+91${_phoneController.text.trim()}';
-      final apiRepo = _getApiRepo();
-      _challengeId = await apiRepo.requestOtp(phoneText);
-      if (!mounted) return;
-      toast(context, 'Verification code sent!');
-      setState(() => _step = 2);
-      _startCountdown();
-    });
-  }
-
-  Future<void> _verifyOtp() async {
-    if (_challengeId == null || _otpController.text.length != 6) {
-      toast(context, 'Enter the complete 6-digit OTP.');
-      return;
-    }
-
-    await _runAction(() async {
-      final apiRepo = _getApiRepo();
-      await apiRepo.verifyOtp(_challengeId!, _otpController.text.trim());
-      if (!mounted) return;
-      toast(context, 'Signed in successfully!');
-      _enterApp(apiRepo);
-    });
-  }
-
-  Future<void> _resendOtp() async {
-    if (_seconds > 0 || _loading || _googleLoading) return;
-    await _runAction(() async {
-      final apiRepo = _getApiRepo();
-      _challengeId = await apiRepo.requestOtp(
-        '+91${_phoneController.text.trim()}',
-      );
-      if (!mounted) return;
-      _otpController.clear();
-      _startCountdown();
-      _otpFocus.requestFocus();
-      toast(context, 'OTP resent!');
     });
   }
 
@@ -237,15 +168,12 @@ class _LoginPageState extends State<LoginPage> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           AuthHeader(
-            onBack: _step > 1
-                ? () => setState(() => _step = 1)
-                : (!widget.showWelcome && Navigator.of(context).canPop()
-                    ? () => Navigator.of(context).pop()
-                    : null),
+            onBack: !widget.showWelcome && Navigator.of(context).canPop()
+                ? () => Navigator.of(context).pop()
+                : null,
           ),
           const SizedBox(height: 24),
-          if (_step <= 1) _buildPhoneLoginForm(),
-          if (_step == 2) _buildOtpForm(),
+          _buildPhoneLoginForm(),
         ],
       ),
     ),
@@ -254,12 +182,10 @@ class _LoginPageState extends State<LoginPage> {
   Widget _buildPhoneLoginForm() => Column(
     crossAxisAlignment: CrossAxisAlignment.stretch,
     children: [
-      AuthTitle(
+      const AuthTitle(
         eyebrow: 'Welcome Back',
         title: 'Sign In',
-        subtitle: _useOtpLogin
-            ? 'Enter your mobile number to receive a secure OTP code'
-            : 'Enter your mobile number and password to sign in',
+        subtitle: 'Enter your mobile number and password to sign in',
       ),
       const SizedBox(height: 24),
       CurvedPhoneInputField(
@@ -268,61 +194,19 @@ class _LoginPageState extends State<LoginPage> {
             ? null
             : 'Enter a valid 10-digit mobile number.',
       ),
-      if (!_useOtpLogin) ...[
-        const SizedBox(height: 16),
-        CurvedPasswordField(
-          controller: _passwordController,
-          label: 'Password *',
-          hint: 'Enter your password',
-          validator: (v) =>
-              (v ?? '').trim().isNotEmpty ? null : 'Enter your account password.',
-        ),
-      ],
-      const SizedBox(height: 12),
-      Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          InkWell(
-            onTap: () {
-              setState(() {
-                _useOtpLogin = !_useOtpLogin;
-              });
-            },
-            child: Text(
-              _useOtpLogin ? 'Sign in with Password instead' : 'Sign in with OTP instead',
-              style: const TextStyle(
-                color: Color(0xFF005CEE),
-                fontSize: 12,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ),
-          if (!_useOtpLogin)
-            InkWell(
-              onTap: () {
-                setState(() {
-                  _useOtpLogin = true;
-                });
-                _sendOtp();
-              },
-              child: const Text(
-                'Forgot password?',
-                style: TextStyle(
-                  color: slateBlue,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            ),
-        ],
+      const SizedBox(height: 16),
+      CurvedPasswordField(
+        controller: _passwordController,
+        label: 'Password *',
+        hint: 'Enter your password',
+        validator: (v) =>
+            (v ?? '').trim().isNotEmpty ? null : 'Enter your account password.',
       ),
-      const SizedBox(height: 22),
+      const SizedBox(height: 24),
       AuthPrimaryButton(
-        label: _loading
-            ? (_useOtpLogin ? 'Sending OTP…' : 'Signing In…')
-            : (_useOtpLogin ? 'Send OTP' : 'Sign In'),
+        label: _loading ? 'Signing In…' : 'Sign In',
         loading: _loading,
-        onPressed: _useOtpLogin ? _sendOtp : _signInWithPassword,
+        onPressed: _signInWithPassword,
       ),
       const SizedBox(height: 24),
       Row(
@@ -370,114 +254,6 @@ class _LoginPageState extends State<LoginPage> {
       ),
       const SizedBox(height: 16),
       const AuthCommunityCard(),
-    ],
-  );
-
-  Widget _buildOtpForm() => Column(
-    crossAxisAlignment: CrossAxisAlignment.stretch,
-    children: [
-      const AuthTitle(
-        eyebrow: 'Security Verification',
-        title: 'Verify OTP',
-        subtitle: 'Enter the 6-digit code sent to',
-      ),
-      const SizedBox(height: 4),
-      Row(
-        children: [
-          Text(
-            '+91 ${_phoneController.text}',
-            style: const TextStyle(
-              color: navy,
-              fontWeight: FontWeight.w800,
-              fontSize: 15,
-            ),
-          ),
-          const SizedBox(width: 8),
-          InkWell(
-            onTap: () => setState(() => _step = 1),
-            child: const Text(
-              'Change',
-              style: TextStyle(
-                color: Color(0xFF0870E4),
-                fontSize: 12,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ),
-        ],
-      ),
-      const SizedBox(height: 28),
-      GestureDetector(
-        onTap: _otpFocus.requestFocus,
-        child: Stack(
-          children: [
-            Row(
-              children: [
-                for (int i = 0; i < 6; i++) ...[
-                  Expanded(
-                    child: Container(
-                      height: 52,
-                      alignment: Alignment.center,
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: i == _otpController.text.length
-                              ? const Color(0xFF005CEE)
-                              : line,
-                          width: i == _otpController.text.length ? 1.8 : 1,
-                        ),
-                      ),
-                      child: Text(
-                        i < _otpController.text.length
-                            ? _otpController.text[i]
-                            : '',
-                        style: heading(20),
-                      ),
-                    ),
-                  ),
-                  if (i < 5) const SizedBox(width: 7),
-                ],
-              ],
-            ),
-            Opacity(
-              opacity: .01,
-              child: SizedBox(
-                width: 1,
-                height: 1,
-                child: TextField(
-                  controller: _otpController,
-                  focusNode: _otpFocus,
-                  autofocus: true,
-                  keyboardType: TextInputType.number,
-                  maxLength: 6,
-                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-      const SizedBox(height: 20),
-      const Text(
-        'Didn’t receive the code?',
-        textAlign: TextAlign.center,
-        style: TextStyle(color: slateBlue, fontSize: 11),
-      ),
-      TextButton(
-        onPressed: _seconds > 0 || _loading || _googleLoading ? null : _resendOtp,
-        child: Text(
-          _seconds > 0
-              ? 'Resend OTP in 00:${_seconds.toString().padLeft(2, '0')}'
-              : 'Resend code',
-        ),
-      ),
-      const SizedBox(height: 28),
-      AuthPrimaryButton(
-        label: _loading ? 'Verifying…' : 'Verify & Sign In',
-        loading: _loading,
-        onPressed: _verifyOtp,
-      ),
     ],
   );
 }
