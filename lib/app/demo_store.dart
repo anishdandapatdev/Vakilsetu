@@ -205,6 +205,11 @@ class DemoStore extends ChangeNotifier {
 
   void read(DemoRoom r) {
     r.unread = 0;
+    for (final room in rooms) {
+      if (room.id == r.id) {
+        room.unread = 0;
+      }
+    }
     notifyListeners();
   }
 
