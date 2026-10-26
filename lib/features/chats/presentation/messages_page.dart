@@ -17,12 +17,14 @@ class MessagesPage extends StatefulWidget {
   final DemoRoom? initialRoom;
   final ValueChanged<bool>? onConversationChanged;
   final MessagingRepository? repository;
+  final VoidCallback? onProfile;
   const MessagesPage({
     super.key,
     required this.store,
     this.initialRoom,
     this.onConversationChanged,
     this.repository,
+    this.onProfile,
   });
   @override
   State<MessagesPage> createState() => _MessagesPageState();
@@ -556,7 +558,10 @@ class _MessagesPageState extends State<MessagesPage> {
           children: [
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 10, 16, 8),
-              child: BrandedTopBar(initials: initials),
+              child: BrandedTopBar(
+                initials: initials,
+                onAvatarTap: widget.onProfile,
+              ),
             ),
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 6, 16, 0),
@@ -654,8 +659,10 @@ class _MessagesPageState extends State<MessagesPage> {
               'Select a conversation to start reading.',
             ),
           )
-        : Column(
-            children: [
+        : SafeArea(
+            bottom: false,
+            child: Column(
+              children: [
               Container(
                 margin: const EdgeInsets.fromLTRB(10, 7, 10, 0),
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
@@ -1408,7 +1415,8 @@ class _MessagesPageState extends State<MessagesPage> {
                 ),
               ),
             ],
-          );
+          ),
+        );
     return Row(
       children: [
         if (wide) ...[

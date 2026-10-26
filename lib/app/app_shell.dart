@@ -182,6 +182,7 @@ class _AppShellState extends State<AppShell> {
           store: store,
           repository: messagingRepository,
           initialRoom: activeRoom,
+          onProfile: () => go(6),
           onConversationChanged: (open) {
             if (conversationOpen == open) return;
             setState(() {
@@ -345,7 +346,7 @@ class _AppShellState extends State<AppShell> {
         ],
       );
       return Scaffold(
-        appBar: wide || selected == 6 || selected == 7 || (selected <= 4 && selected != 1)
+        appBar: wide || selected != 5
             ? null
             : AppBar(
                 title: const Brand(small: true),

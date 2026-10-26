@@ -1,6 +1,9 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:vakilsetu/app/demo_store.dart';
+import 'package:vakilsetu/design_system/ui.dart';
 import 'package:vakilsetu/features/chats/domain/conversation.dart';
+import 'package:vakilsetu/features/chats/presentation/messages_page.dart';
 
 void main() {
   group('MessagesPage logic tests', () {
@@ -82,6 +85,43 @@ void main() {
       expect(room.group, isFalse);
       expect(room.unread, equals(3));
       expect(room.lastMessagePreview, equals('Latest draft uploaded'));
+    });
+
+    testWidgets('MessagesPage active chat screen does not contain VakilSetu logo or menubar header', (tester) async {
+      tester.view.physicalSize = const Size(400, 800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      final store = DemoStore();
+      final activeRoom = DemoRoom('room_kabir', 'Kabir Malhotra', 'Private conversation', 'KM');
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: MessagesPage(
+              store: store,
+              initialRoom: activeRoom,
+            ),
+          ),
+        ),
+      );
+
+      await tester.pumpAndSettle();
+
+      // The chat room header card is present
+      expect(find.text('Kabir Malhotra'), findsOneWidget);
+      expect(find.text('Private conversation'), findsOneWidget);
+      expect(find.byTooltip('Back to conversations'), findsOneWidget);
+
+      // VakilSetu logo, menubar, and BrandedTopBar are NOT rendered above the active chat
+      expect(find.byType(VakilSetuLogo), findsNothing);
+      expect(find.byType(Brand), findsNothing);
+      expect(find.byType(BrandedTopBar), findsNothing);
+      expect(find.byIcon(Icons.menu_rounded), findsNothing);
+      expect(find.byIcon(Icons.menu), findsNothing);
     });
   });
 }
