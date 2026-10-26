@@ -27,6 +27,7 @@ class FirestoreMessagingRepository
   final Map<String, StreamSubscription<QuerySnapshot<Map<String, dynamic>>>>
       _messageSubs = {};
   bool _seeded = false;
+  bool _attachmentsSeeded = false;
 
   static const Map<String, String> _knownAdvocateNames = {
     'adv_meera': 'Meera Sharma',
@@ -700,9 +701,23 @@ class FirestoreMessagingRepository
     final attachmentId = _generateUuid();
     final base64Data = base64Encode(bytes);
 
+    String conversationTitle = 'Legal Document';
+    try {
+      if (conversationId.isNotEmpty) {
+        final convDoc = await _firestore
+            .collection('conversations')
+            .doc(conversationId)
+            .get();
+        if (convDoc.exists && convDoc.data()?['title'] != null) {
+          conversationTitle = convDoc.data()!['title'] as String;
+        }
+      }
+    } catch (_) {}
+
     await _firestore.collection('attachments').doc(attachmentId).set({
       'id': attachmentId,
       'conversationId': conversationId,
+      'conversationTitle': conversationTitle,
       'filename': filename,
       'contentType': contentType,
       'byteSize': bytes.length,
@@ -711,6 +726,7 @@ class FirestoreMessagingRepository
       'uploaderId': _currentUserId,
     });
 
+    _syncEvents.add(null);
     return attachmentId;
   }
 
@@ -723,8 +739,139 @@ class FirestoreMessagingRepository
         final base64Data = doc.data()!['dataBase64'] as String;
         return base64Decode(base64Data);
       }
-    } catch (_) {}
-    return utf8.encode('Sample court document content for VakilSetu preview.');
+    } catch (e) {
+      debugPrint('Firestore downloadAttachment error: $e');
+    }
+    throw StateError('Attachment not found or unreadable');
+  }
+
+  Future<void> _seedInitialAttachments() async {
+    final initialDocs = [
+      {
+        'id': 'att_wp_1042_2026',
+        'conversationId': '11111111-2222-3333-4444-555555555553',
+        'conversationTitle': 'Delhi High Court Bar Association',
+        'filename': 'Petition_Draft_WP_1042_2026.pdf',
+        'contentType': 'application/pdf',
+        'court': 'HIGH COURT OF DELHI AT NEW DELHI',
+        'caseNum': 'W.P.(C) 1042/2026',
+        'summary': 'Writ Petition under Article 226 of the Constitution of India for interim protection.',
+      },
+      {
+        'id': 'att_order_saket_14',
+        'conversationId': '11111111-2222-3333-4444-555555555551',
+        'conversationTitle': 'Meera Sharma',
+        'filename': 'Court_Order_Item_14_Saket.pdf',
+        'contentType': 'application/pdf',
+        'court': 'COURT OF DISTRICT JUDGE, SAKET COURTS, NEW DELHI',
+        'caseNum': 'Civil Suit No. 412/2026',
+        'summary': 'Interim Injunction Order passed in matter listed at Item 14.',
+      },
+      {
+        'id': 'att_vakalatnama_meera',
+        'conversationId': '11111111-2222-3333-4444-555555555551',
+        'conversationTitle': 'Meera Sharma',
+        'filename': 'Vakalatnama_Meera_Sharma.pdf',
+        'contentType': 'application/pdf',
+        'court': 'BAR COUNCIL OF DELHI - POWER OF ATTORNEY',
+        'caseNum': 'Enrolment No. D/1420/2018',
+        'summary': 'Executed Advocate Vakalatnama appointing counsel for all court proceedings.',
+      },
+      {
+        'id': 'att_evidence_report',
+        'conversationId': '11111111-2222-3333-4444-555555555553',
+        'conversationTitle': 'Delhi High Court Bar Association',
+        'filename': 'Evidence_Site_Inspection_Report.pdf',
+        'contentType': 'application/pdf',
+        'court': 'LOCAL COMMISSIONER EVIDENCE REPORT',
+        'caseNum': 'Commission Order Dated 12-09-2026',
+        'summary': 'Joint site inspection, demarcation findings, and annexed photographic evidence.',
+      },
+    ];
+
+    for (final doc in initialDocs) {
+      final pdfBytes = _buildSimplePdf(
+        doc['filename'] as String,
+        doc['court'] as String,
+        doc['caseNum'] as String,
+        doc['summary'] as String,
+      );
+      await _firestore.collection('attachments').doc(doc['id'] as String).set({
+        'id': doc['id'],
+        'conversationId': doc['conversationId'],
+        'conversationTitle': doc['conversationTitle'],
+        'filename': doc['filename'],
+        'contentType': doc['contentType'],
+        'byteSize': pdfBytes.length,
+        'dataBase64': base64Encode(pdfBytes),
+        'createdAt': FieldValue.serverTimestamp(),
+        'uploaderId': _currentUserId,
+      }, SetOptions(merge: true));
+    }
+  }
+
+  static List<int> _buildSimplePdf(
+    String title,
+    String court,
+    String caseNum,
+    String summary,
+  ) {
+    final cleanCourt = court.replaceAll(RegExp(r'[()]'), '');
+    final cleanTitle = title.replaceAll(RegExp(r'[()]'), '');
+    final cleanCase = caseNum.replaceAll(RegExp(r'[()]'), '');
+    final cleanSummary = summary.replaceAll(RegExp(r'[()]'), '');
+
+    final content = '''
+BT
+/F1 14 Tf
+50 750 Td
+($cleanCourt) Tj
+/F1 12 Tf
+0 -30 Td
+(Document: $cleanTitle) Tj
+0 -22 Td
+(Case: $cleanCase) Tj
+0 -22 Td
+(Verified Digital Filing - VakilSetu Court Records) Tj
+0 -30 Td
+($cleanSummary) Tj
+ET
+''';
+    final streamBytes = utf8.encode(content);
+    final streamLength = streamBytes.length;
+    final pdfText = '''%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>
+endobj
+4 0 obj
+<< /Length $streamLength >>
+stream
+$content
+endstream
+endobj
+5 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+xref
+0 6
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000115 00000 n 
+0000000244 00000 n 
+0000000350 00000 n 
+trailer
+<< /Size 6 /Root 1 0 R >>
+startxref
+450
+%%EOF''';
+    return utf8.encode(pdfText);
   }
 
   @override
@@ -734,11 +881,21 @@ class FirestoreMessagingRepository
     String kind = 'all',
   }) async {
     try {
-      final snapshot = await _firestore
+      var snapshot = await _firestore
           .collection('attachments')
           .orderBy('createdAt', descending: true)
           .limit(50)
           .get();
+
+      if (snapshot.docs.isEmpty && !_attachmentsSeeded) {
+        _attachmentsSeeded = true;
+        await _seedInitialAttachments();
+        snapshot = await _firestore
+            .collection('attachments')
+            .orderBy('createdAt', descending: true)
+            .limit(50)
+            .get();
+      }
 
       final items = <SharedAttachment>[];
       for (final doc in snapshot.docs) {
@@ -750,6 +907,8 @@ class FirestoreMessagingRepository
             (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now();
         final byteSize = (data['byteSize'] as num?)?.toInt() ?? 0;
         final conversationId = data['conversationId'] as String? ?? '';
+        final conversationTitle = data['conversationTitle'] as String? ??
+            'Legal Attachment';
 
         if (search.isNotEmpty &&
             !filename.toLowerCase().contains(search.toLowerCase())) {
@@ -763,7 +922,7 @@ class FirestoreMessagingRepository
           id: doc.id,
           messageId: doc.id,
           conversationId: conversationId,
-          conversationTitle: 'Document Attachment',
+          conversationTitle: conversationTitle,
           filename: filename,
           contentType: contentType,
           byteSize: byteSize,
@@ -771,13 +930,10 @@ class FirestoreMessagingRepository
         ));
       }
 
-      if (items.isNotEmpty) {
-        return SharedAttachmentPage(items, null);
-      }
-      return SharedAttachmentPage(_defaultAttachments, null);
+      return SharedAttachmentPage(items, null);
     } catch (e) {
       debugPrint('Firestore sharedAttachments error: $e');
-      return SharedAttachmentPage(_defaultAttachments, null);
+      return const SharedAttachmentPage([], null);
     }
   }
 
@@ -1219,39 +1375,6 @@ class FirestoreMessagingRepository
       lastMessageAt: DateTime.now().subtract(const Duration(minutes: 15)),
       lastMessagePreview: 'Adv. Meera: Listed at item 14 before Court 4.',
       unreadCount: 2,
-    ),
-  ];
-
-  static final _defaultAttachments = [
-    SharedAttachment(
-      id: 'att_1',
-      messageId: 'msg_1',
-      conversationId: '11111111-2222-3333-4444-555555555553',
-      conversationTitle: 'Delhi High Court Bar Association',
-      filename: 'Petition_draft.pdf',
-      contentType: 'application/pdf',
-      byteSize: 2516582,
-      createdAt: DateTime.now().subtract(const Duration(hours: 3)),
-    ),
-    SharedAttachment(
-      id: 'att_2',
-      messageId: 'msg_2',
-      conversationId: '11111111-2222-3333-4444-555555555553',
-      conversationTitle: 'Delhi High Court Bar Association',
-      filename: 'Court_order.pdf',
-      contentType: 'application/pdf',
-      byteSize: 1153433,
-      createdAt: DateTime.now().subtract(const Duration(hours: 5)),
-    ),
-    SharedAttachment(
-      id: 'att_3',
-      messageId: 'msg_3',
-      conversationId: '11111111-2222-3333-4444-555555555551',
-      conversationTitle: 'Meera Sharma',
-      filename: 'Evidence_01.jpg',
-      contentType: 'image/jpeg',
-      byteSize: 972800,
-      createdAt: DateTime.now().subtract(const Duration(hours: 7)),
     ),
   ];
 }
