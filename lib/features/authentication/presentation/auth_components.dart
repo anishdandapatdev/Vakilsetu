@@ -65,12 +65,14 @@ class _SoftCircle extends StatelessWidget {
 class AuthWelcomePanel extends StatelessWidget {
   final VoidCallback? onStart;
   final VoidCallback? onSignUp;
+  final VoidCallback? onExplore;
   final bool embedded;
 
   const AuthWelcomePanel({
     super.key,
     this.onStart,
     this.onSignUp,
+    this.onExplore,
     this.embedded = false,
   });
 
@@ -169,6 +171,21 @@ class AuthWelcomePanel extends StatelessWidget {
             ),
             onPressed: onSignUp,
             child: const Text('Create New Advocate Account'),
+          ),
+        ],
+        if (onExplore != null) ...[
+          const SizedBox(height: 12),
+          TextButton.icon(
+            onPressed: onExplore,
+            icon: const Icon(Icons.arrow_forward_rounded, size: 16, color: slateBlue),
+            label: const Text(
+              'Explore VakilSetu as Guest Advocate',
+              style: TextStyle(
+                color: slateBlue,
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
           ),
         ],
       ],

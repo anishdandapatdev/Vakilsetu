@@ -1,9 +1,7 @@
 import 'package:firebase_core/firebase_core.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import 'app/app.dart';
-import 'core/config/api_config.dart';
 import 'firebase_options.dart';
 
 Future<void> main() async {
@@ -17,21 +15,18 @@ Future<void> main() async {
     debugPrint('Firebase initialization failed: $e');
   }
 
-  // A release must explicitly select the connected API or a labeled demo.
-  // Server-readable messaging is supported; E2EE is not claimed here.
   const requestedDemoMode = bool.fromEnvironment(
     'DEMO_MODE',
-    defaultValue: !kReleaseMode,
+    defaultValue: false,
   );
-  const demoMode = requestedDemoMode && !ApiConfig.enabled;
-  if (demoMode) {
+  if (requestedDemoMode) {
     // Keep accessible labels available throughout the preview's lifetime.
     WidgetsFlutterBinding.ensureInitialized().ensureSemantics();
   }
   runApp(
-    demoMode || ApiConfig.enabled
-        ? DemoPreview(showBanner: demoMode)
-        : const SetupRequiredApp(),
+    requestedDemoMode
+        ? const DemoPreview(showBanner: true)
+        : const VakilSetuApp(),
   );
 }
 

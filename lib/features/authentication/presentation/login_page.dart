@@ -147,6 +147,7 @@ class _LoginPageState extends State<LoginPage> {
                             key: const ValueKey('welcome-screen'),
                             onStart: () => setState(() => _step = 1),
                             onSignUp: _openSignUp,
+                            onExplore: () => _enterApp(_repository ?? FirebaseAuthRepository()),
                           )
                         : _buildFlowContent(),
                   ),
@@ -252,7 +253,22 @@ class _LoginPageState extends State<LoginPage> {
           ),
         ],
       ),
-      const SizedBox(height: 16),
+      const SizedBox(height: 8),
+      Center(
+        child: TextButton.icon(
+          onPressed: () => _enterApp(_repository ?? FirebaseAuthRepository()),
+          icon: const Icon(Icons.arrow_forward_rounded, size: 16, color: slateBlue),
+          label: const Text(
+            'Explore App as Guest Advocate',
+            style: TextStyle(
+              color: slateBlue,
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
+      ),
+      const SizedBox(height: 12),
       const AuthCommunityCard(),
     ],
   );
