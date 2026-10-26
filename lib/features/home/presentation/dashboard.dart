@@ -124,12 +124,12 @@ class _DashboardState extends State<Dashboard> {
             .sharedAttachments();
         if (mounted) {
           setState(() {
-            documents = page.items.isNotEmpty ? page.items.take(3).toList() : null;
+            documents = page.items;
           });
         }
       } on Object {
         if (mounted) {
-          setState(() => documents = null);
+          setState(() => documents = const []);
         }
       }
     }
@@ -1228,25 +1228,32 @@ class _Documents extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final docs = <(String, String, SharedAttachment?)>[
-      if (documents == null) ...[
-        ('Petition_draft.pdf', '2.4 MB · 5 Sep', null),
-        ('Court_order.pdf', '1.1 MB · 4 Sep', null),
-        ('Evidence_01.jpg', '950 KB · 3 Sep', null),
-      ] else
-        for (final document in documents!.take(3))
-          (
-            document.filename,
-            '${(document.byteSize / 1024).round()} KB · ${document.conversationTitle}',
-            document,
-          ),
-    ];
+    final docs = documents?.take(3).toList() ?? const [];
     return _HomeSection(
       title: 'Recent Documents',
       onSeeAll: onAll,
       child: docs.isEmpty
-          ? const Surface(
-              child: Text('No files shared in your conversations yet'),
+          ? Surface(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+                child: Row(
+                  children: [
+                    const Icon(Icons.folder_open_rounded, size: 26, color: muted),
+                    const SizedBox(width: 10),
+                    const Expanded(
+                      child: Text(
+                        'No legal files shared in conversations yet',
+                        style: TextStyle(fontSize: 11, color: muted),
+                      ),
+                    ),
+                    TextButton.icon(
+                      onPressed: onAll,
+                      icon: const Icon(Icons.add_rounded, size: 16),
+                      label: const Text('Add Document', style: TextStyle(fontSize: 11)),
+                    ),
+                  ],
+                ),
+              ),
             )
           : SizedBox(
               height: 72,
@@ -1254,74 +1261,75 @@ class _Documents extends StatelessWidget {
                 scrollDirection: Axis.horizontal,
                 itemCount: docs.length,
                 separatorBuilder: (_, _) => const SizedBox(width: 10),
-                itemBuilder: (_, i) => InkWell(
-                  onTap: () =>
-                      docs[i].$3 == null ? onAll() : onDownload(docs[i].$3!),
-                  borderRadius: BorderRadius.circular(12),
-                  child: Container(
-                    width: 230,
-                    padding: const EdgeInsets.all(11),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: line),
-                    ),
-                    child: Row(
-                      children: [
-                        Container(
-                          width: 38,
-                          height: 44,
-                          decoration: BoxDecoration(
-                            color: i == 2 ? paleBlue : const Color(0xFFFFEFF0),
-                            borderRadius: BorderRadius.circular(7),
+                itemBuilder: (_, i) {
+                  final doc = docs[i];
+                  final isImage = doc.contentType.startsWith('image/');
+                  return InkWell(
+                    onTap: () => onDownload(doc),
+                    borderRadius: BorderRadius.circular(12),
+                    child: Container(
+                      width: 230,
+                      padding: const EdgeInsets.all(11),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: line),
+                      ),
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 38,
+                            height: 44,
+                            decoration: BoxDecoration(
+                              color: isImage ? paleBlue : const Color(0xFFFFEFF0),
+                              borderRadius: BorderRadius.circular(7),
+                            ),
+                            child: Icon(
+                              isImage
+                                  ? Icons.image_rounded
+                                  : Icons.picture_as_pdf_rounded,
+                              color: isImage ? _royal : _red,
+                              size: 25,
+                            ),
                           ),
-                          child: Icon(
-                            i == 2
-                                ? Icons.image_rounded
-                                : Icons.picture_as_pdf_rounded,
-                            color: i == 2 ? _royal : _red,
-                            size: 25,
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                docs[i].$1,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w800,
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  doc.filename,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w800,
+                                  ),
                                 ),
-                              ),
-                              const SizedBox(height: 3),
-                              Text(
-                                docs[i].$2,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
-                                  fontSize: 8,
-                                  color: muted,
+                                const SizedBox(height: 3),
+                                Text(
+                                  '${(doc.byteSize / 1024).round()} KB · ${doc.conversationTitle}',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    fontSize: 8,
+                                    color: muted,
+                                  ),
                                 ),
-                              ),
-                            ],
+                              ],
+                            ),
                           ),
-                        ),
-                        Icon(
-                          docs[i].$3 == null
-                              ? Icons.chevron_right_rounded
-                              : Icons.download_rounded,
-                          size: 19,
-                          color: navy,
-                        ),
-                      ],
+                          Icon(
+                            Icons.download_rounded,
+                            size: 19,
+                            color: navy,
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
-                ),
+                  );
+                },
               ),
             ),
     );
