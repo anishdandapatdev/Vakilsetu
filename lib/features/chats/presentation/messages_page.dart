@@ -112,15 +112,20 @@ class _MessagesPageState extends State<MessagesPage> {
         if (!historyInitialized) nextHistoryCursor = page.nextCursor;
         historyInitialized = true;
       });
-      if (widget.store.receipts) {
+      if (room.unread > 0) {
+        setState(() => room.unread = 0);
+        widget.store.read(room);
+      }
+      if (widget.repository is ServerMessaging) {
         final incoming = page.items.where((message) => !message.mine).toList();
-        if (incoming.isNotEmpty) {
-          unawaited(
-            (widget.repository! as ServerMessaging)
-                .markRead(room.id, incoming.last.id)
-                .catchError((_) {}),
-          );
-        }
+        final throughId = incoming.isNotEmpty
+            ? incoming.last.id
+            : (page.items.isNotEmpty ? page.items.last.id : '');
+        unawaited(
+          (widget.repository! as ServerMessaging)
+              .markRead(room.id, throughId)
+              .catchError((_) {}),
+        );
       }
     } catch (_) {
       // Keep the last loaded history during temporary outages.
@@ -183,6 +188,15 @@ class _MessagesPageState extends State<MessagesPage> {
   }
 
   void _openRoom(DemoRoom? room) {
+    if (room != null) {
+      room.unread = 0;
+      widget.store.read(room);
+      if (widget.repository is ServerMessaging) {
+        (widget.repository! as ServerMessaging)
+            .markRead(room.id, '')
+            .catchError((_) {});
+      }
+    }
     composer.clear();
     setState(() {
       active = room;
@@ -205,6 +219,15 @@ class _MessagesPageState extends State<MessagesPage> {
   void initState() {
     super.initState();
     active = widget.initialRoom;
+    if (active != null) {
+      active!.unread = 0;
+      widget.store.read(active!);
+      if (widget.repository is ServerMessaging) {
+        (widget.repository! as ServerMessaging)
+            .markRead(active!.id, '')
+            .catchError((_) {});
+      }
+    }
     historyTimer = Timer.periodic(
       const Duration(seconds: 4),
       (_) => _refreshHistory(),
@@ -245,7 +268,7 @@ class _MessagesPageState extends State<MessagesPage> {
               : 'Private conversation',
           initials.isEmpty ? 'VS' : initials,
           group: summary.kind == ConversationKind.privateGroup,
-          unread: summary.unreadCount,
+          unread: (active?.id == summary.id) ? 0 : summary.unreadCount,
           lastMessagePreview: summary.lastMessagePreview,
           lastMessageAt: summary.lastMessageAt ?? summary.createdAt,
         );
@@ -277,6 +300,15 @@ class _MessagesPageState extends State<MessagesPage> {
     super.didUpdateWidget(old);
     if (old.initialRoom != widget.initialRoom) {
       active = widget.initialRoom;
+      if (active != null) {
+        active!.unread = 0;
+        widget.store.read(active!);
+        if (widget.repository is ServerMessaging) {
+          (widget.repository! as ServerMessaging)
+              .markRead(active!.id, '')
+              .catchError((_) {});
+        }
+      }
       historyRoomId = null;
       historyInitialized = false;
       nextHistoryCursor = null;
