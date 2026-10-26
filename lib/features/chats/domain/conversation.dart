@@ -24,6 +24,12 @@ class ConversationSummary {
   final DateTime? lastMessageAt;
   final String? lastMessagePreview;
   final int unreadCount;
+  final String? description;
+  final String? category;
+  final String? inviteCode;
+  final int? memberCount;
+  final String? createdBy;
+  final bool isPublic;
   const ConversationSummary({
     required this.id,
     required this.kind,
@@ -33,6 +39,12 @@ class ConversationSummary {
     this.lastMessageAt,
     this.lastMessagePreview,
     this.unreadCount = 0,
+    this.description,
+    this.category,
+    this.inviteCode,
+    this.memberCount,
+    this.createdBy,
+    this.isPublic = true,
   });
 }
 
@@ -103,6 +115,17 @@ abstract interface class ConversationCreator {
   Future<ConversationSummary> createDirect(String peerAccountId);
   Future<ConversationSummary> createGroup(
     String title,
-    List<String> memberAccountIds,
-  );
+    List<String> memberAccountIds, {
+    String? description,
+    String? category,
+    String? inviteCode,
+    bool isPublic,
+  });
+}
+
+/// Interface for joining, leaving, and discovering groups.
+abstract interface class GroupManager {
+  Future<ConversationSummary> joinGroupByCode(String inviteCodeOrId);
+  Future<void> leaveGroup(String conversationId);
+  Future<List<ConversationSummary>> listDiscoverableGroups();
 }

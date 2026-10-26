@@ -15,6 +15,7 @@ class FirestoreMessagingRepository
     implements
         MessagingRepository,
         ConversationCreator,
+        GroupManager,
         ServerMessaging,
         ConversationAuthorizer,
         EncryptedMessageTransport {
@@ -175,6 +176,13 @@ class FirestoreMessagingRepository
           }
         }
 
+        final description = data['description'] as String?;
+        final category = data['category'] as String?;
+        final inviteCode = data['inviteCode'] as String?;
+        final memberCount = (data['memberCount'] as num?)?.toInt() ?? memberIds.length;
+        final createdBy = data['createdBy'] as String?;
+        final isPublic = (data['isPublic'] as bool?) ?? true;
+
         return ConversationSummary(
           id: doc.id,
           kind: isGroup
@@ -186,6 +194,12 @@ class FirestoreMessagingRepository
           lastMessageAt: lastMessageAt,
           lastMessagePreview: lastMessagePreview,
           unreadCount: unread,
+          description: description,
+          category: category ?? (isGroup ? 'Chamber Group' : null),
+          inviteCode: inviteCode,
+          memberCount: memberCount,
+          createdBy: createdBy,
+          isPublic: isPublic,
         );
       }).toList();
 
@@ -384,12 +398,18 @@ class FirestoreMessagingRepository
   @override
   Future<ConversationSummary> createGroup(
     String title,
-    List<String> memberAccountIds,
-  ) async {
+    List<String> memberAccountIds, {
+    String? description,
+    String? category,
+    String? inviteCode,
+    bool isPublic = true,
+  }) async {
     final uid = _currentUserId;
     final allMembers = {uid, ...memberAccountIds}.toList();
     final id = _generateUuid();
     final now = FieldValue.serverTimestamp();
+    final effectiveCode = inviteCode ??
+        'VS-${(DateTime.now().millisecondsSinceEpoch % 9000 + 1000)}';
 
     final data = {
       'id': id,
@@ -402,6 +422,11 @@ class FirestoreMessagingRepository
       'lastMessagePreview': 'Group created',
       'unreadCount': 0,
       'createdBy': uid,
+      'description': description ?? '',
+      'category': category ?? 'Chamber Group',
+      'inviteCode': effectiveCode,
+      'isPublic': isPublic,
+      'memberCount': allMembers.length,
     };
 
     await _firestore.collection('conversations').doc(id).set(data);
@@ -417,7 +442,135 @@ class FirestoreMessagingRepository
       lastMessageAt: DateTime.now(),
       lastMessagePreview: 'Group created',
       unreadCount: 0,
+      description: description,
+      category: category ?? 'Chamber Group',
+      inviteCode: effectiveCode,
+      memberCount: allMembers.length,
+      createdBy: uid,
+      isPublic: isPublic,
     );
+  }
+
+  @override
+  Future<ConversationSummary> joinGroupByCode(String inviteCodeOrId) async {
+    final uid = _currentUserId;
+    final normalized = inviteCodeOrId.trim().toUpperCase();
+
+    // 1. Search by invite code first
+    var query = await _firestore
+        .collection('conversations')
+        .where('inviteCode', isEqualTo: normalized)
+        .limit(1)
+        .get();
+
+    // 2. If not found, try searching by document ID directly
+    DocumentSnapshot<Map<String, dynamic>>? doc;
+    if (query.docs.isNotEmpty) {
+      doc = query.docs.first;
+    } else {
+      final byId = await _firestore
+          .collection('conversations')
+          .doc(inviteCodeOrId.trim())
+          .get();
+      if (byId.exists) {
+        doc = byId;
+      }
+    }
+
+    if (doc == null || !doc.exists) {
+      throw Exception('No group found with code or ID "$inviteCodeOrId"');
+    }
+
+    final data = doc.data()!;
+    final memberIds =
+        (data['memberIds'] as List<dynamic>?)?.cast<String>() ?? [];
+    if (!memberIds.contains(uid)) {
+      await _firestore.collection('conversations').doc(doc.id).update({
+        'memberIds': FieldValue.arrayUnion([uid]),
+        'memberCount': memberIds.length + 1,
+      });
+    }
+
+    _listenToConversationMessages(doc.id);
+    _syncEvents.add(null);
+
+    final createdAt =
+        (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now();
+    final lastMessageAt = (data['lastMessageAt'] as Timestamp?)?.toDate();
+    return ConversationSummary(
+      id: doc.id,
+      kind: ConversationKind.privateGroup,
+      title: data['title'] as String? ?? 'Private Group',
+      membershipEpoch: (data['membershipEpoch'] as num?)?.toInt() ?? 1,
+      createdAt: createdAt,
+      lastMessageAt: lastMessageAt,
+      lastMessagePreview: data['lastMessagePreview'] as String?,
+      unreadCount: 0,
+      description: data['description'] as String?,
+      category: data['category'] as String? ?? 'Chamber Group',
+      inviteCode: data['inviteCode'] as String?,
+      memberCount: memberIds.length + (memberIds.contains(uid) ? 0 : 1),
+      createdBy: data['createdBy'] as String?,
+      isPublic: (data['isPublic'] as bool?) ?? true,
+    );
+  }
+
+  @override
+  Future<void> leaveGroup(String conversationId) async {
+    final uid = _currentUserId;
+    try {
+      await _firestore.collection('conversations').doc(conversationId).update({
+        'memberIds': FieldValue.arrayRemove([uid]),
+        'memberCount': FieldValue.increment(-1),
+      });
+      _syncEvents.add(null);
+    } catch (e) {
+      debugPrint('Firestore leaveGroup error: $e');
+      rethrow;
+    }
+  }
+
+  @override
+  Future<List<ConversationSummary>> listDiscoverableGroups() async {
+    try {
+      final query = await _firestore
+          .collection('conversations')
+          .where('kind', isEqualTo: 'privateGroup')
+          .get();
+
+      final list = <ConversationSummary>[];
+      for (final doc in query.docs) {
+        final data = doc.data();
+        final memberIds =
+            (data['memberIds'] as List<dynamic>?)?.cast<String>() ?? [];
+        final createdAt =
+            (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now();
+        final lastMessageAt = (data['lastMessageAt'] as Timestamp?)?.toDate();
+        list.add(
+          ConversationSummary(
+            id: doc.id,
+            kind: ConversationKind.privateGroup,
+            title: data['title'] as String? ?? 'Private Group',
+            membershipEpoch: (data['membershipEpoch'] as num?)?.toInt() ?? 1,
+            createdAt: createdAt,
+            lastMessageAt: lastMessageAt,
+            lastMessagePreview: data['lastMessagePreview'] as String?,
+            unreadCount: 0,
+            description: data['description'] as String?,
+            category: data['category'] as String? ?? 'Chamber Group',
+            inviteCode: data['inviteCode'] as String?,
+            memberCount:
+                (data['memberCount'] as num?)?.toInt() ?? memberIds.length,
+            createdBy: data['createdBy'] as String?,
+            isPublic: (data['isPublic'] as bool?) ?? true,
+          ),
+        );
+      }
+      return list;
+    } catch (e) {
+      debugPrint('Firestore listDiscoverableGroups error: $e');
+      return const [];
+    }
   }
 
   @override
@@ -1127,6 +1280,12 @@ startxref
             'The bar association meeting on digital filings is at 4 PM in library hall.',
         'unreadCount': 2,
         'createdBy': 'adv_meera',
+        'inviteCode': 'VS-DHCBA',
+        'category': 'Bar Association',
+        'description':
+            'Official forum for advocates registered with Delhi High Court Bar Association.',
+        'memberCount': 240,
+        'isPublic': true,
       }, SetOptions(merge: true));
 
       await groupDoc.collection('messages').doc('msg_grp_1').set({
@@ -1155,6 +1314,54 @@ startxref
         'deliveredCount': 4,
         'readCount': 2,
       });
+
+      // Conversation 4: Saket Chamber & Litigation Forum (Discoverable)
+      const saketId = '11111111-2222-3333-4444-555555555554';
+      final saketDoc = _firestore.collection('conversations').doc(saketId);
+      await saketDoc.set({
+        'id': saketId,
+        'kind': 'privateGroup',
+        'title': 'Saket Chamber & Litigation Forum',
+        'memberIds': ['adv_kabir', 'adv_meera', 'adv_naina'],
+        'membershipEpoch': 1,
+        'createdAt': Timestamp.fromDate(now.subtract(const Duration(days: 5))),
+        'lastMessageAt':
+            Timestamp.fromDate(now.subtract(const Duration(hours: 5))),
+        'lastMessagePreview':
+            'Chamber brief coordination for Saket Court civil appeal.',
+        'unreadCount': 0,
+        'createdBy': 'adv_kabir',
+        'inviteCode': 'VS-SAKET',
+        'category': 'Chamber Group',
+        'description':
+            'Trial advocacy, cause-list coordination, and chamber updates for Saket District Court.',
+        'memberCount': 18,
+        'isPublic': true,
+      }, SetOptions(merge: true));
+
+      // Conversation 5: Commercial & Arbitration Bench (Discoverable)
+      const arbId = '11111111-2222-3333-4444-555555555555';
+      final arbDoc = _firestore.collection('conversations').doc(arbId);
+      await arbDoc.set({
+        'id': arbId,
+        'kind': 'privateGroup',
+        'title': 'Commercial & Arbitration Bench',
+        'memberIds': ['adv_rohit', 'adv_naina'],
+        'membershipEpoch': 1,
+        'createdAt': Timestamp.fromDate(now.subtract(const Duration(days: 7))),
+        'lastMessageAt':
+            Timestamp.fromDate(now.subtract(const Duration(hours: 8))),
+        'lastMessagePreview':
+            'New draft guidelines on fast-track commercial arbitrations.',
+        'unreadCount': 0,
+        'createdBy': 'adv_rohit',
+        'inviteCode': 'VS-ARB01',
+        'category': 'Practice Forum',
+        'description':
+            'Commercial dispute resolution, arbitration procedures, and mediation briefs.',
+        'memberCount': 45,
+        'isPublic': true,
+      }, SetOptions(merge: true));
 
       debugPrint('Firestore seed conversations complete');
     } catch (e) {

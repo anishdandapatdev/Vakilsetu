@@ -105,13 +105,19 @@ class _AppShellState extends State<AppShell> {
       summary.id,
       summary.title,
       summary.kind == ConversationKind.privateGroup
-          ? 'Private group'
+          ? (summary.category ?? 'Private group')
           : 'Private conversation',
       initials.isEmpty ? 'VS' : initials,
       group: summary.kind == ConversationKind.privateGroup,
       unread: summary.unreadCount,
       lastMessagePreview: summary.lastMessagePreview,
       lastMessageAt: summary.lastMessageAt ?? summary.createdAt,
+      category: summary.category,
+      description: summary.description,
+      inviteCode: summary.inviteCode,
+      memberCount: summary.memberCount ?? 1,
+      createdBy: summary.createdBy,
+      isPublic: summary.isPublic,
     );
   }
 
@@ -132,11 +138,22 @@ class _AppShellState extends State<AppShell> {
 
   Future<DemoRoom?> createServerGroup(
     String title,
-    List<String> memberIds,
-  ) async {
+    List<String> memberIds, {
+    String? category,
+    String? description,
+    String? inviteCode,
+    bool isPublic = true,
+  }) async {
     if (messagingRepository is! ConversationCreator) return null;
     final summary = await (messagingRepository! as ConversationCreator)
-        .createGroup(title, memberIds);
+        .createGroup(
+          title,
+          memberIds,
+          category: category,
+          description: description,
+          inviteCode: inviteCode,
+          isPublic: isPublic,
+        );
     return _roomFromSummary(summary);
   }
 
@@ -206,6 +223,7 @@ class _AppShellState extends State<AppShell> {
         GroupsPage(
           store: store,
           onOpen: chat,
+          onProfile: () => go(6),
           directoryRepository: advocatesRepository,
           messagingRepository: messagingRepository,
           onCreateServerGroup: messagingRepository is ConversationCreator

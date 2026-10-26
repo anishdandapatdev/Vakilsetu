@@ -63,6 +63,12 @@ class DemoRoom {
   final String? lastMessagePreview;
   final DateTime? lastMessageAt;
   final List<DemoMessage> messages;
+  final String? category;
+  final String? description;
+  final String? inviteCode;
+  final int memberCount;
+  final String? createdBy;
+  final bool isPublic;
   int unread;
   DemoRoom(
     this.id,
@@ -73,6 +79,12 @@ class DemoRoom {
     this.unread = 0,
     this.lastMessagePreview,
     this.lastMessageAt,
+    this.category,
+    this.description,
+    this.inviteCode,
+    this.memberCount = 1,
+    this.createdBy,
+    this.isPublic = true,
     List<DemoMessage>? messages,
   }) : messages = messages ?? [];
 }
@@ -118,6 +130,108 @@ class DemoStore extends ChangeNotifier {
       'RV',
     ),
   ];
+
+  late final List<DemoRoom> availableGroups = [
+    DemoRoom(
+      'saket',
+      'Saket Chamber',
+      '12 members',
+      'SC',
+      group: true,
+      category: 'Chamber Group',
+      inviteCode: 'VS-SAKET',
+      memberCount: 12,
+      description:
+          'Civil and commercial litigation trial team for Saket District Court.',
+      createdBy: 'Kabir Malhotra',
+      messages: [DemoMessage('Rohit: Hearing moved to Court No. 12.')],
+    ),
+    DemoRoom(
+      'research',
+      'Research Team',
+      '6 members',
+      'RT',
+      group: true,
+      category: 'Study Circle',
+      inviteCode: 'VS-RSRCH',
+      memberCount: 6,
+      description:
+          'High Court case law citations, precedent analysis, and brief drafting.',
+      createdBy: 'Meera Sharma',
+      messages: [DemoMessage('Ananya: New citations added to the draft.')],
+    ),
+    DemoRoom(
+      'high-court-juniors',
+      'High Court Juniors',
+      '12 members',
+      'HJ',
+      group: true,
+      category: 'Practice Forum',
+      inviteCode: 'VS-HCJUN',
+      memberCount: 12,
+      description:
+          'Junior advocates forum for procedural guidance and roster updates.',
+      createdBy: 'Rohit Verma',
+      messages: [DemoMessage('Rohan: Can someone share the latest circular?')],
+    ),
+    DemoRoom(
+      'delhi-bar',
+      'Delhi High Court Bar Association',
+      '240 members',
+      'DH',
+      group: true,
+      category: 'Bar Association',
+      inviteCode: 'VS-DHCBA',
+      memberCount: 240,
+      description:
+          'Official community forum for registered advocates of Delhi High Court.',
+      createdBy: 'Meera Sharma',
+      messages: [
+        DemoMessage(
+          'Bar Notice: Digital filing seminar this Friday at 4 PM.',
+        ),
+      ],
+    ),
+    DemoRoom(
+      'commercial-bench',
+      'Commercial & Arbitration Bench',
+      '45 members',
+      'CB',
+      group: true,
+      category: 'Practice Forum',
+      inviteCode: 'VS-ARB01',
+      memberCount: 45,
+      description:
+          'Fast-track commercial arbitration and mediation practice group.',
+      createdBy: 'Rohit Verma',
+      messages: [
+        DemoMessage('New draft guidelines on emergency arbitrator hearings.'),
+      ],
+    ),
+    DemoRoom(
+      'tax-society',
+      'Tax & Corporate Legal Society',
+      '68 members',
+      'TS',
+      group: true,
+      category: 'Chamber Group',
+      inviteCode: 'VS-TAX99',
+      memberCount: 68,
+      description:
+          'GST disputes, direct tax assessment tribunals, and NCLT hearings.',
+      createdBy: 'Naina Bansal',
+      messages: [
+        DemoMessage('Supreme Court ruling on input tax credit uploaded.'),
+      ],
+    ),
+  ];
+
+  late final Set<String> joinedGroupIds = {
+    'saket',
+    'research',
+    'high-court-juniors',
+  };
+
   late final List<DemoRoom> rooms = [
     DemoRoom(
       'meera',
@@ -153,30 +267,9 @@ class DemoStore extends ChangeNotifier {
         DemoMessage("The matter is listed tomorrow. Let's coordinate."),
       ],
     ),
-    DemoRoom(
-      'saket',
-      'Saket Chamber',
-      '12 members',
-      'SC',
-      group: true,
-      messages: [DemoMessage('Rohit: Hearing moved to Court No. 12.')],
-    ),
-    DemoRoom(
-      'research',
-      'Research team',
-      '6 members',
-      'RT',
-      group: true,
-      messages: [DemoMessage('Ananya: New citations added to the draft.')],
-    ),
-    DemoRoom(
-      'high-court-juniors',
-      'High Court Juniors',
-      '12 members',
-      'HJ',
-      group: true,
-      messages: [DemoMessage('Rohan: Can someone share the latest circular?')],
-    ),
+    availableGroups[0],
+    availableGroups[1],
+    availableGroups[2],
   ];
   final notices = [
     DemoNotice(
@@ -194,6 +287,37 @@ class DemoStore extends ChangeNotifier {
   String name = 'Arjun Khanna', enrollment = 'D/1234/2018', court = courts[1];
   bool notifications = true, receipts = false, pending = false;
   int avatar = 0;
+
+  bool isGroupJoined(DemoRoom group) => joinedGroupIds.contains(group.id);
+
+  DemoRoom? joinGroupByCode(String codeOrId) {
+    final query = codeOrId.trim().toUpperCase();
+    final matching = availableGroups.where(
+      (g) =>
+          (g.inviteCode?.toUpperCase() == query) ||
+          g.id.toUpperCase() == query ||
+          g.name.toUpperCase() == query,
+    );
+    if (matching.isEmpty) return null;
+    final group = matching.first;
+    joinGroup(group);
+    return group;
+  }
+
+  void joinGroup(DemoRoom group) {
+    joinedGroupIds.add(group.id);
+    if (!rooms.any((r) => r.id == group.id)) {
+      rooms.add(group);
+    }
+    notifyListeners();
+  }
+
+  void leaveGroup(String groupId) {
+    joinedGroupIds.remove(groupId);
+    rooms.removeWhere((r) => r.id == groupId);
+    notifyListeners();
+  }
+
   DemoRoom openAdvocate(DemoAdvocate a) {
     final existing = rooms.where((r) => r.id == a.id);
     if (existing.isNotEmpty) return existing.first;
@@ -226,15 +350,40 @@ class DemoStore extends ChangeNotifier {
     notifyListeners();
   }
 
-  DemoRoom createGroup(String name, Set<String> members) {
+  DemoRoom createGroup(
+    String name,
+    Set<String> members, {
+    String? category,
+    String? description,
+    String? inviteCode,
+    bool isPublic = true,
+  }) {
+    final initials = name
+        .split(' ')
+        .where((part) => part.isNotEmpty)
+        .map((part) => part[0].toUpperCase())
+        .take(2)
+        .join();
+    final effectiveInitials = initials.isEmpty ? 'GP' : initials;
+    final effectiveCode = inviteCode ??
+        'VS-${(DateTime.now().millisecondsSinceEpoch % 9000 + 1000)}';
+
     final r = DemoRoom(
-      'group-${rooms.length}',
+      'group-${DateTime.now().millisecondsSinceEpoch}',
       name,
       '${members.length + 1} members',
-      'GP',
+      effectiveInitials,
       group: true,
+      category: category ?? 'Chamber Group',
+      description: description ?? 'Private chamber group',
+      inviteCode: effectiveCode,
+      memberCount: members.length + 1,
+      createdBy: this.name,
+      isPublic: isPublic,
     );
+    joinedGroupIds.add(r.id);
     rooms.add(r);
+    availableGroups.add(r);
     notifyListeners();
     return r;
   }

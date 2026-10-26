@@ -254,10 +254,18 @@ class ApiMessagingRepository
   @override
   Future<ConversationSummary> createGroup(
     String title,
-    List<String> memberAccountIds,
-  ) => _createdConversation('/conversations/groups', {
+    List<String> memberAccountIds, {
+    String? description,
+    String? category,
+    String? inviteCode,
+    bool isPublic = true,
+  }) => _createdConversation('/conversations/groups', {
     'title': title,
     'memberAccountIds': memberAccountIds,
+    if (description != null) 'description': description,
+    if (category != null) 'category': category,
+    if (inviteCode != null) 'inviteCode': inviteCode,
+    'isPublic': isPublic,
   });
 
   @override
