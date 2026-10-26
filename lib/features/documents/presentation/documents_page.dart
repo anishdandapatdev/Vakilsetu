@@ -5,14 +5,8 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
 import '../../../design_system/ui.dart';
+import '../../chats/domain/conversation.dart';
 import '../../chats/domain/server_messaging.dart';
-
-const sampleDocuments = [
-  'Petition_draft.pdf',
-  'Court_order.pdf',
-  'Cause_list.pdf',
-  'Evidence_photo.jpg',
-];
 
 class DocumentsPage extends StatefulWidget {
   final ServerMessaging? repository;
@@ -26,26 +20,46 @@ class _DocumentsPageState extends State<DocumentsPage> {
   List<SharedAttachment> documents = [];
   String? nextCursor, loadError;
   bool loading = false;
+  bool uploading = false;
   Timer? searchDebounce;
   int requestGeneration = 0;
+  StreamSubscription<void>? _syncSub;
 
   @override
   void initState() {
     super.initState();
-    if (widget.repository != null) _load();
+    if (widget.repository != null) {
+      _load();
+      if (widget.repository is MessagingRepository) {
+        _syncSub =
+            (widget.repository! as MessagingRepository).syncAvailable.listen((_) {
+          _filtersChanged(immediate: true);
+        });
+      }
+    }
   }
 
   @override
   void didUpdateWidget(covariant DocumentsPage oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.repository != widget.repository && widget.repository != null) {
-      _filtersChanged(immediate: true);
+    if (oldWidget.repository != widget.repository) {
+      _syncSub?.cancel();
+      if (widget.repository != null) {
+        if (widget.repository is MessagingRepository) {
+          _syncSub =
+              (widget.repository! as MessagingRepository).syncAvailable.listen((_) {
+            _filtersChanged(immediate: true);
+          });
+        }
+        _filtersChanged(immediate: true);
+      }
     }
   }
 
   @override
   void dispose() {
     searchDebounce?.cancel();
+    _syncSub?.cancel();
     super.dispose();
   }
 
@@ -74,7 +88,7 @@ class _DocumentsPageState extends State<DocumentsPage> {
         ? search.substring(0, 100)
         : search;
     final kind = switch (filter) {
-      'PDFs' => 'pdf',
+      'PDFs' => 'documents',
       'Images' => 'images',
       _ => 'all',
     };
@@ -107,42 +121,116 @@ class _DocumentsPageState extends State<DocumentsPage> {
   Future<void> _download(SharedAttachment document) async {
     try {
       final bytes = await widget.repository!.downloadAttachment(document.id);
-      await FilePicker.platform.saveFile(
+      final savedPath = await FilePicker.platform.saveFile(
         dialogTitle: 'Save ${document.filename}',
         fileName: document.filename,
         bytes: Uint8List.fromList(bytes),
       );
+      if (mounted && savedPath != null) {
+        toast(context, 'Saved ${document.filename}');
+      }
     } on Object catch (error) {
       if (mounted) toast(context, 'Could not download file: $error');
     }
   }
 
-  bool _matches(String name) =>
-      name.toLowerCase().contains(query.toLowerCase()) &&
-      (filter == 'All' ||
-          (filter == 'PDFs'
-              ? name.toLowerCase().endsWith('.pdf')
-              : RegExp(
-                  r'\.(jpe?g|png)$',
-                  caseSensitive: false,
-                ).hasMatch(name)));
+  Future<void> _pickAndUploadDocument() async {
+    if (widget.repository == null || uploading) return;
+    final picked = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: const ['pdf', 'jpg', 'jpeg', 'png', 'doc', 'docx'],
+      withData: true,
+    );
+    final file = picked?.files.single;
+    if (file == null || file.bytes == null) return;
+    if (file.size > 25 * 1024 * 1024) {
+      if (mounted) toast(context, 'Document must be 25 MB or smaller.');
+      return;
+    }
+
+    final ext = file.extension?.toLowerCase();
+    final contentType = switch (ext) {
+      'pdf' => 'application/pdf',
+      'jpg' || 'jpeg' => 'image/jpeg',
+      'png' => 'image/png',
+      'doc' => 'application/msword',
+      'docx' =>
+          'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      _ => 'application/octet-stream',
+    };
+
+    setState(() => uploading = true);
+    try {
+      await widget.repository!.uploadAttachment(
+        '',
+        file.name,
+        contentType,
+        file.bytes!,
+      );
+      if (mounted) {
+        toast(context, 'Uploaded "${file.name}" to legal records.');
+        _load();
+      }
+    } catch (e) {
+      if (mounted) toast(context, 'Could not upload document: $e');
+    } finally {
+      if (mounted) setState(() => uploading = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    final docs = sampleDocuments.where(_matches).toList();
-    final shared = documents;
     return PageBody(
       children: [
-        PageTitle(
-          'Documents',
-          widget.repository == null
-              ? 'Sample files for exploring the design.'
-              : 'Recent files shared in your conversations.',
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Expanded(
+              child: PageTitle(
+                'Documents',
+                'Verified court filings, orders, and legal records.',
+              ),
+            ),
+            if (widget.repository != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: ElevatedButton.icon(
+                  onPressed: uploading ? null : _pickAndUploadDocument,
+                  icon: uploading
+                      ? const SizedBox(
+                          width: 14,
+                          height: 14,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Icon(Icons.upload_file_rounded, size: 17),
+                  label: Text(
+                    uploading ? 'Uploading...' : 'Upload File',
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: slateBlue,
+                    foregroundColor: Colors.white,
+                    elevation: 0,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 10,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                ),
+              ),
+          ],
         ),
         SearchBox(
-          hint: widget.repository == null
-              ? 'Search sample documents'
-              : 'Search shared documents',
+          hint: 'Search legal documents and orders',
           onChanged: (v) {
             setState(() => query = v);
             _filtersChanged();
@@ -158,7 +246,8 @@ class _DocumentsPageState extends State<DocumentsPage> {
                   f,
                   style: TextStyle(
                     fontSize: 12,
-                    fontWeight: filter == f ? FontWeight.w700 : FontWeight.w600,
+                    fontWeight:
+                        filter == f ? FontWeight.w700 : FontWeight.w600,
                     color: Colors.black,
                   ),
                 ),
@@ -182,36 +271,24 @@ class _DocumentsPageState extends State<DocumentsPage> {
             children: [
               if (loading) const LinearProgressIndicator(minHeight: 2),
               if (loadError != null) ...[
-                Text('Could not load shared files: $loadError'),
+                Text('Could not load legal documents: $loadError'),
                 TextButton(
                   onPressed: () => _load(more: documents.isNotEmpty),
                   child: const Text('Retry'),
                 ),
               ],
-              if (widget.repository == null && docs.isEmpty ||
-                  widget.repository != null &&
-                      shared.isEmpty &&
-                      !loading &&
-                      loadError == null)
-                const EmptyState(
+              if (documents.isEmpty && !loading && loadError == null)
+                EmptyState(
                   'No matching documents',
-                  'Try a different name or file type.',
+                  query.isNotEmpty
+                      ? 'No files match "$query". Try a different search.'
+                      : 'No documents uploaded yet. Upload a case file or petition.',
                 ),
-              for (final d
-                  in (widget.repository == null || (shared.isEmpty && !loading)) ? docs : const <String>[]) ...[
-                DocumentTile(
-                  name: d,
-                  detail: d.endsWith('.pdf')
-                      ? '1.2 MB · PDF · Sample file'
-                      : '860 KB · Image · Sample file',
-                ),
-                const SizedBox(height: 13),
-              ],
-              for (final document in shared) ...[
+              for (final document in documents) ...[
                 DocumentTile(
                   name: document.filename,
                   detail:
-                      '${(document.byteSize / 1024).round()} KB · ${document.conversationTitle}',
+                      '${(document.byteSize / 1024).round()} KB · ${document.contentType.contains('pdf') ? 'PDF' : 'Document'} · ${document.conversationTitle}',
                   onTap: () => _download(document),
                 ),
                 const SizedBox(height: 13),
@@ -224,12 +301,6 @@ class _DocumentsPageState extends State<DocumentsPage> {
             ],
           ),
         ),
-        const SizedBox(height: 16),
-        if (widget.repository == null)
-          const Text(
-            'Sample documents only. No real files are opened in demo mode.',
-            style: TextStyle(color: muted, fontSize: 11),
-          ),
       ],
     );
   }
