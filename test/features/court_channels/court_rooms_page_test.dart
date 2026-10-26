@@ -86,7 +86,7 @@ class _FakeCourtRepository implements CourtRepository {
 
 void main() {
   group('CourtRoomsPage Senior Designer Tests', () {
-    testWidgets('Renders segmented filter chips with accurate counts', (tester) async {
+    testWidgets('Renders segmented filter chips and defaults to My Channels', (tester) async {
       tester.view.physicalSize = const Size(400, 800);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(() {
@@ -116,14 +116,19 @@ void main() {
       expect(find.text('High Court'), findsOneWidget);
       expect(find.text('District Courts'), findsOneWidget);
 
-      // Verify court names are rendered
+      // By default, 'My Channels' is active, showing joined courts (Delhi High Court & Saket District Court)
       expect(find.text('Delhi High Court'), findsOneWidget);
       expect(find.text('Saket District Court'), findsOneWidget);
+
+      // Switch to All Courts to view all 4
+      await tester.tap(find.text('All Courts'));
+      await tester.pumpAndSettle();
+
       expect(find.text('Tis Hazari Courts'), findsOneWidget);
       expect(find.text('Patiala House Courts'), findsOneWidget);
     });
 
-    testWidgets('Displays Joined for subscribed courts and Join for unjoined courts', (tester) async {
+    testWidgets('Displays Joined for subscribed courts and Join for unjoined courts in All Courts', (tester) async {
       tester.view.physicalSize = const Size(400, 800);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(() {
@@ -149,6 +154,10 @@ void main() {
         ),
       );
 
+      await tester.pumpAndSettle();
+
+      // Switch to All Courts
+      await tester.tap(find.text('All Courts'));
       await tester.pumpAndSettle();
 
       // Exactly 1 'Joined' badge and 3 'Join' buttons
@@ -184,6 +193,10 @@ void main() {
 
       await tester.pumpAndSettle();
 
+      // Switch to All Courts
+      await tester.tap(find.text('All Courts'));
+      await tester.pumpAndSettle();
+
       // Tap Join on Tis Hazari Courts
       final joinButtons = find.widgetWithText(ElevatedButton, 'Join');
       expect(joinButtons, findsWidgets);
@@ -195,7 +208,7 @@ void main() {
       expect(find.text('Joined'), findsNWidgets(2));
     });
 
-    testWidgets('Switching to My Channels tab filters only joined courts', (tester) async {
+    testWidgets('Defaults to My Channels tab filtering only joined courts', (tester) async {
       tester.view.physicalSize = const Size(400, 800);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(() {
@@ -223,11 +236,7 @@ void main() {
 
       await tester.pumpAndSettle();
 
-      // Tap 'My Channels' chip
-      await tester.tap(find.text('My Channels'));
-      await tester.pumpAndSettle();
-
-      // Only Delhi High Court should be visible
+      // Only Delhi High Court should be visible initially because My Channels is default
       expect(find.text('Delhi High Court'), findsOneWidget);
       expect(find.text('Tis Hazari Courts'), findsNothing);
       expect(find.text('Patiala House Courts'), findsNothing);

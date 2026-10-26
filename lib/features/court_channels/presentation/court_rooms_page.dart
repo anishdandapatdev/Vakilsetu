@@ -25,7 +25,7 @@ class CourtRoomsPage extends StatefulWidget {
 
 class _CourtRoomsPageState extends State<CourtRoomsPage> {
   String query = '';
-  String activeFilter = 'All';
+  String activeFilter = 'Joined';
   CourtChannel? selectedChannel;
   List<CourtChannel>? apiCourts;
   Set<String> apiJoined = {};
