@@ -374,12 +374,14 @@ Click **Start collection** > Collection ID: `attachments`
 
 | Field Name | Type | Value | Notes |
 | :--- | :--- | :--- | :--- |
-| `id` | `string` | `att_001` | Unique ID |
-| `conversationId` | `string` | `11111111-2222-3333-4444-555555555551` | Linked conversation |
-| `filename` | `string` | `Arbitration_Clause_Draft.pdf` | File name |
+| `id` | `string` | `att_wp_1042_2026` | Unique ID |
+| `conversationId` | `string` | `11111111-2222-3333-4444-555555555553` | Linked conversation |
+| `conversationTitle`| `string` | `Delhi High Court Bar Association` | Channel or contact name |
+| `filename` | `string` | `Petition_Draft_WP_1042_2026.pdf` | File name |
 | `contentType` | `string` | `application/pdf` | MIME type |
 | `byteSize` | `number` | `24580` | Size in bytes |
 | `dataBase64` | `string` | *(Base64 encoded string)* | File content |
+| `uploaderId` | `string` | `user_123` | ID of uploader |
 | `createdAt` | `timestamp` | *(Select date/time)* | Upload time |
 
 ---

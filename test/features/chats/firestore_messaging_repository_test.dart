@@ -165,6 +165,27 @@ void main() {
       };
       expect(resolveUnread(perUserDoc), equals(1));
     });
+
+    test('SharedAttachment model represents verified backend court document', () {
+      final now = DateTime.now();
+      final attachment = SharedAttachment(
+        id: 'att_wp_1042_2026',
+        messageId: 'msg_101',
+        conversationId: 'conv_delhi_bar',
+        conversationTitle: 'Delhi High Court Bar Association',
+        filename: 'Petition_Draft_WP_1042_2026.pdf',
+        contentType: 'application/pdf',
+        byteSize: 102400,
+        createdAt: now,
+      );
+
+      expect(attachment.id, equals('att_wp_1042_2026'));
+      expect(attachment.filename, equals('Petition_Draft_WP_1042_2026.pdf'));
+      expect(attachment.contentType, equals('application/pdf'));
+      expect(attachment.conversationTitle, equals('Delhi High Court Bar Association'));
+      expect(attachment.byteSize, equals(102400));
+      expect(attachment.createdAt, equals(now));
+    });
   });
 }
 
