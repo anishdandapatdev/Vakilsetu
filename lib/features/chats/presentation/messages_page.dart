@@ -8,7 +8,6 @@ import 'package:file_picker/file_picker.dart';
 import '../../../app/demo_store.dart';
 import '../../../design_system/ui.dart';
 import '../../home/presentation/dashboard.dart';
-import '../../documents/presentation/documents_page.dart';
 import '../domain/conversation.dart';
 import '../domain/server_messaging.dart';
 
@@ -349,10 +348,10 @@ class _MessagesPageState extends State<MessagesPage> {
   }
 
   Future<void> _pickAndSendAttachment() async {
-    if (!serverRoom || sending) return;
+    if (active == null || sending) return;
     final picked = await FilePicker.platform.pickFiles(
       type: FileType.custom,
-      allowedExtensions: const ['pdf', 'jpg', 'jpeg', 'png'],
+      allowedExtensions: const ['pdf', 'jpg', 'jpeg', 'png', 'doc', 'docx'],
       withData: true,
     );
     final file = picked?.files.single;
@@ -369,34 +368,40 @@ class _MessagesPageState extends State<MessagesPage> {
       'pdf' => 'application/pdf',
       'jpg' || 'jpeg' => 'image/jpeg',
       'png' => 'image/png',
-      _ => null,
+      'doc' => 'application/msword',
+      'docx' =>
+          'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      _ => 'application/octet-stream',
     };
-    if (contentType == null) return;
     final room = active!;
-    setState(() => sending = true);
-    try {
-      final messaging = widget.repository! as ServerMessaging;
-      final attachmentId = await messaging.uploadAttachment(
-        room.id,
-        file.name,
-        contentType,
-        file.bytes!,
-      );
-      await messaging.sendText(
-        room.id,
-        _newClientMessageId(),
-        composer.text.trim(),
-        attachmentId: attachmentId,
-        replyToMessageId: replyingTo?.id,
-      );
-      if (!mounted) return;
-      composer.clear();
-      setState(() => replyingTo = null);
-      await _refreshHistory();
-    } on Object catch (error) {
-      if (mounted) toast(context, 'Could not send attachment: $error');
-    } finally {
-      if (mounted) setState(() => sending = false);
+    if (serverRoom) {
+      setState(() => sending = true);
+      try {
+        final messaging = widget.repository! as ServerMessaging;
+        final attachmentId = await messaging.uploadAttachment(
+          room.id,
+          file.name,
+          contentType,
+          file.bytes!,
+        );
+        await messaging.sendText(
+          room.id,
+          _newClientMessageId(),
+          composer.text.trim(),
+          attachmentId: attachmentId,
+          replyToMessageId: replyingTo?.id,
+        );
+        if (!mounted) return;
+        composer.clear();
+        setState(() => replyingTo = null);
+        await _refreshHistory();
+      } on Object catch (error) {
+        if (mounted) toast(context, 'Could not send attachment: $error');
+      } finally {
+        if (mounted) setState(() => sending = false);
+      }
+    } else {
+      send(file: file.name);
     }
   }
 
@@ -1354,46 +1359,8 @@ class _MessagesPageState extends State<MessagesPage> {
                         crossAxisAlignment: CrossAxisAlignment.end,
                         children: [
                           IconButton(
-                            tooltip: 'Attach a sample document',
-                            onPressed: serverRoom
-                                ? _pickAndSendAttachment
-                                : () => showModalBottomSheet(
-                                    context: context,
-                                    showDragHandle: true,
-                                    builder: (c) => SafeArea(
-                                      child: Padding(
-                                        padding: const EdgeInsets.all(20),
-                                        child: Column(
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            Text(
-                                              'Attach a sample file',
-                                              style: heading(19),
-                                            ),
-                                            const SizedBox(height: 8),
-                                            const Text(
-                                              'Device file upload comes with encrypted storage integration.',
-                                              style: TextStyle(
-                                                color: muted,
-                                                fontSize: 11,
-                                              ),
-                                            ),
-                                            for (final f in sampleDocuments)
-                                              ListTile(
-                                                leading: const LegalIcon(
-                                                  'documents',
-                                                ),
-                                                title: Text(f),
-                                                onTap: () {
-                                                  Navigator.pop(c);
-                                                  send(file: f);
-                                                },
-                                              ),
-                                          ],
-                                        ),
-                                      ),
-                                    ),
-                                  ),
+                            tooltip: 'Attach a document or file',
+                            onPressed: _pickAndSendAttachment,
                             icon: const Icon(
                               Icons.attach_file_rounded,
                               color: Color(0xFF0870E4),
