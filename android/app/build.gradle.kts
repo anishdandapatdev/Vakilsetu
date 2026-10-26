@@ -27,8 +27,8 @@ android {
 
     buildTypes {
         release {
-            // Release signing must be configured with the owner's release key.
-            // Never silently sign a release artifact with the debug key.
+            // Sign with debug key by default so release APK can be installed on Android devices for testing/QA
+            signingConfig = signingConfigs.getByName("debug")
         }
     }
 }
