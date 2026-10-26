@@ -148,7 +148,12 @@ class FirestoreMessagingRepository
             (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now();
         final lastMessageAt = (data['lastMessageAt'] as Timestamp?)?.toDate();
         final lastMessagePreview = data['lastMessagePreview'] as String?;
-        final unread = (data['unreadCount'] as num?)?.toInt() ?? 0;
+        final lastSenderId = data['lastSenderId'] as String?;
+        final unreadCounts = data['unreadCounts'] as Map<String, dynamic>?;
+        final rawUnread = (unreadCounts != null && unreadCounts.containsKey(uid))
+            ? (unreadCounts[uid] as num?)?.toInt() ?? 0
+            : (data['unreadCount'] as num?)?.toInt() ?? 0;
+        final unread = (lastSenderId == uid) ? 0 : rawUnread;
         final memberIds =
             (data['memberIds'] as List<dynamic>?)?.cast<String>() ?? [];
 
@@ -589,6 +594,7 @@ class FirestoreMessagingRepository
               body.isNotEmpty ? body : (attachmentName ?? 'Attachment'),
           'lastMessageAt': FieldValue.serverTimestamp(),
           'lastSenderId': uid,
+          'unreadCount': FieldValue.increment(1),
           'memberIds': FieldValue.arrayUnion([uid]),
         }, SetOptions(merge: true));
       }
@@ -598,6 +604,7 @@ class FirestoreMessagingRepository
             body.isNotEmpty ? body : (attachmentName ?? 'Attachment'),
         'lastMessageAt': FieldValue.serverTimestamp(),
         'lastSenderId': uid,
+        'unreadCount': FieldValue.increment(1),
         'memberIds': FieldValue.arrayUnion([uid]),
       }, SetOptions(merge: true));
     }
@@ -640,16 +647,36 @@ class FirestoreMessagingRepository
 
   @override
   Future<void> markRead(String conversationId, String throughMessageId) async {
+    final uid = _currentUserId;
+    for (var i = 0; i < _fallbackConversations.length; i++) {
+      if (_fallbackConversations[i].id == conversationId) {
+        final c = _fallbackConversations[i];
+        _fallbackConversations[i] = ConversationSummary(
+          id: c.id,
+          kind: c.kind,
+          title: c.title,
+          membershipEpoch: c.membershipEpoch,
+          createdAt: c.createdAt,
+          lastMessageAt: c.lastMessageAt,
+          lastMessagePreview: c.lastMessagePreview,
+          unreadCount: 0,
+        );
+      }
+    }
+
     try {
-      await _firestore.collection('conversations').doc(conversationId).update({
+      await _firestore.collection('conversations').doc(conversationId).set({
         'unreadCount': 0,
-      });
+        'unreadCounts': {
+          uid: 0,
+        },
+      }, SetOptions(merge: true));
 
       final snapshot = await _firestore
           .collection('conversations')
           .doc(conversationId)
           .collection('messages')
-          .where('senderAccountId', isNotEqualTo: _currentUserId)
+          .where('senderAccountId', isNotEqualTo: uid)
           .limit(20)
           .get();
 
@@ -658,7 +685,9 @@ class FirestoreMessagingRepository
           doc.reference.update({'readCount': 1});
         }
       }
-    } catch (_) {}
+    } catch (_) {} finally {
+      _syncEvents.add(null);
+    }
   }
 
   @override
