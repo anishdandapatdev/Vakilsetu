@@ -123,5 +123,51 @@ void main() {
       expect(find.byIcon(Icons.menu_rounded), findsNothing);
       expect(find.byIcon(Icons.menu), findsNothing);
     });
+
+    testWidgets('Tapping unread conversation immediately clears green badge to chevron', (tester) async {
+      tester.view.physicalSize = const Size(400, 800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      final store = DemoStore();
+      for (final r in store.rooms) {
+        r.unread = 0;
+      }
+      final meeraRoom = store.rooms.firstWhere((r) => r.name == 'Meera Sharma');
+      meeraRoom.unread = 1;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: MessagesPage(
+              store: store,
+            ),
+          ),
+        ),
+      );
+
+      await tester.pumpAndSettle();
+
+      // Green badge '1' is initially visible
+      expect(find.text('1'), findsOneWidget);
+
+      // Tap on Meera Sharma to open conversation
+      await tester.tap(find.text('Meera Sharma'));
+      await tester.pumpAndSettle();
+
+      // Chat screen is open
+      expect(find.byTooltip('Back to conversations'), findsOneWidget);
+
+      // Tap back button to return to conversation list
+      await tester.tap(find.byTooltip('Back to conversations'));
+      await tester.pumpAndSettle();
+
+      // Green badge '1' is now gone and unread count is 0
+      expect(find.text('1'), findsNothing);
+      expect(meeraRoom.unread, equals(0));
+    });
   });
 }

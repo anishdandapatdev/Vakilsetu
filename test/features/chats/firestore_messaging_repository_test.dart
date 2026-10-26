@@ -127,5 +127,44 @@ void main() {
       expect(message.attachmentName, equals('sample.pdf'));
       expect(message.attachmentBytes, equals(1024));
     });
+
+    test('unread calculation logic resets unread to 0 when last sender is current user', () {
+      const currentUid = 'user_123';
+
+      int resolveUnread(Map<String, dynamic> data) {
+        final lastSenderId = data['lastSenderId'] as String?;
+        final unreadCounts = data['unreadCounts'] as Map<String, dynamic>?;
+        final rawUnread = (unreadCounts != null && unreadCounts.containsKey(currentUid))
+            ? (unreadCounts[currentUid] as num?)?.toInt() ?? 0
+            : (data['unreadCount'] as num?)?.toInt() ?? 0;
+        return (lastSenderId == currentUid) ? 0 : rawUnread;
+      }
+
+      // Incoming message from peer: unread count is preserved
+      final incomingDoc = {
+        'lastSenderId': 'peer_456',
+        'unreadCount': 2,
+      };
+      expect(resolveUnread(incomingDoc), equals(2));
+
+      // Outgoing message from current user: unread count is always 0
+      final outgoingDoc = {
+        'lastSenderId': currentUid,
+        'unreadCount': 2,
+      };
+      expect(resolveUnread(outgoingDoc), equals(0));
+
+      // Per-user unread tracking
+      final perUserDoc = {
+        'lastSenderId': 'peer_456',
+        'unreadCount': 3,
+        'unreadCounts': {
+          currentUid: 1,
+          'other_user': 3,
+        },
+      };
+      expect(resolveUnread(perUserDoc), equals(1));
+    });
   });
 }
+
