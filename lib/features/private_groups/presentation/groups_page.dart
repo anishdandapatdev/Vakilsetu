@@ -102,22 +102,30 @@ class _GroupsPageState extends State<GroupsPage> {
       final result = await widget.directoryRepository!.search(query: '');
       if (!mounted) return;
       setState(() {
-        serverAdvocates = result.items.map((profile) {
+        final seen = <String>{};
+        final list = <DemoAdvocate>[];
+        for (final profile in result.items) {
+          final cleanId = profile.id.startsWith('adv_')
+              ? profile.id.substring(4)
+              : profile.id;
+          final key = cleanId.isNotEmpty ? cleanId : profile.enrollmentNumber;
+          if (!seen.add(key)) continue;
           final initials = profile.fullName
               .split(' ')
               .where((part) => part.isNotEmpty)
               .map((part) => part[0])
               .take(2)
               .join();
-          return DemoAdvocate(
+          list.add(DemoAdvocate(
             profile.id,
             profile.fullName,
             profile.primaryCourtName ?? 'Court not provided',
             profile.enrollmentNumber,
             'Legal professional',
             initials,
-          );
-        }).toList();
+          ));
+        }
+        serverAdvocates = list;
       });
     } on Object {
       // Creation dialog reports unavailable server members if opened.

@@ -82,10 +82,22 @@ class FirestoreAdvocatesRepository
   ) {
     final cleanQuery = query.trim().toLowerCase();
     final list = <AdvocateProfile>[];
+    final seen = <String>{};
 
     for (final doc in docs) {
       final profile = _docToProfile(doc);
+      final normId = profile.id.toLowerCase().startsWith('adv_')
+          ? profile.id.toLowerCase().substring(4)
+          : profile.id.toLowerCase();
+      final key = normId.isNotEmpty
+          ? normId
+          : (profile.enrollmentNumber.isNotEmpty
+              ? profile.enrollmentNumber.trim().toLowerCase()
+              : profile.fullName.trim().toLowerCase());
+      if (seen.contains(key)) continue;
+
       if (cleanQuery.isEmpty) {
+        seen.add(key);
         list.add(profile);
       } else {
         final matches = profile.fullName.toLowerCase().contains(cleanQuery) ||
@@ -94,7 +106,10 @@ class FirestoreAdvocatesRepository
                 .toLowerCase()
                 .contains(cleanQuery) ||
             (profile.practiceAreas ?? '').toLowerCase().contains(cleanQuery);
-        if (matches) list.add(profile);
+        if (matches) {
+          seen.add(key);
+          list.add(profile);
+        }
       }
     }
     return list;

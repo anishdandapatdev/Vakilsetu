@@ -117,6 +117,58 @@ class _DirectoryPageState extends State<DirectoryPage> {
     }
   }
 
+  static String _cleanAdvocateId(String id) {
+    final lower = id.trim().toLowerCase();
+    return lower.startsWith('adv_') ? lower.substring(4) : lower;
+  }
+
+  static bool _areSameAdvocate(DemoAdvocate a, DemoAdvocate b) {
+    final aClean = _cleanAdvocateId(a.id);
+    final bClean = _cleanAdvocateId(b.id);
+    if (aClean.isNotEmpty && aClean == bClean) return true;
+
+    final aName = a.name.trim().toLowerCase();
+    final bName = b.name.trim().toLowerCase();
+    if (aName.isNotEmpty && aName == bName) return true;
+
+    final aEnroll = a.enrollment.trim().toLowerCase();
+    final bEnroll = b.enrollment.trim().toLowerCase();
+    if (aEnroll.isNotEmpty && aEnroll == bEnroll) return true;
+
+    return false;
+  }
+
+  static List<DemoAdvocate> _deduplicate(Iterable<DemoAdvocate> items) {
+    final result = <DemoAdvocate>[];
+    for (final item in items) {
+      if (!result.any((existing) => _areSameAdvocate(existing, item))) {
+        result.add(item);
+      }
+    }
+    return result;
+  }
+
+  bool _isSaved(String id) {
+    final clean = _cleanAdvocateId(id);
+    return saved.contains(id) ||
+        saved.contains(clean) ||
+        saved.contains('adv_$clean');
+  }
+
+  void _toggleSaved(String id) {
+    final clean = _cleanAdvocateId(id);
+    final currentlySaved = _isSaved(id);
+    setState(() {
+      if (currentlySaved) {
+        saved.remove(id);
+        saved.remove(clean);
+        saved.remove('adv_$clean');
+      } else {
+        saved.add(id);
+      }
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     const preserveDemoData = bool.fromEnvironment(
@@ -124,15 +176,14 @@ class _DirectoryPageState extends State<DirectoryPage> {
       defaultValue: !kReleaseMode,
     );
     final serverItems = apiResults ?? const <DemoAdvocate>[];
-    final source = widget.repository == null
-        ? widget.store.advocates
-        : [
-            ...serverItems,
-            if (preserveDemoData)
-              ...widget.store.advocates.where(
-                (demo) => !serverItems.any((server) => server.id == demo.id),
-              ),
-          ];
+    final source = _deduplicate([
+      if (widget.repository == null)
+        ...widget.store.advocates
+      else ...[
+        ...serverItems,
+        if (preserveDemoData) ...widget.store.advocates,
+      ],
+    ]);
     final results = source
         .where(
           (advocate) =>
@@ -268,12 +319,8 @@ class _DirectoryPageState extends State<DirectoryPage> {
                     for (final advocate in results) ...[
                       _AdvocateCard(
                         advocate: advocate,
-                        saved: saved.contains(advocate.id),
-                        onSave: () => setState(() {
-                          saved.contains(advocate.id)
-                              ? saved.remove(advocate.id)
-                              : saved.add(advocate.id);
-                        }),
+                        saved: _isSaved(advocate.id),
+                        onSave: () => _toggleSaved(advocate.id),
                         onMessage: () => widget.onMessage(advocate),
                         onProfile: () => _showProfile(advocate),
                       ),
@@ -510,7 +557,10 @@ class _AdvocatePhoto extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final asset = 'assets/images/advocates/${advocate.id}.png';
+    final cleanId = advocate.id.trim().toLowerCase().startsWith('adv_')
+        ? advocate.id.trim().toLowerCase().substring(4)
+        : advocate.id.trim().toLowerCase();
+    final asset = 'assets/images/advocates/$cleanId.png';
     return Stack(
       alignment: Alignment.bottomRight,
       children: [
