@@ -337,7 +337,16 @@ class _CourtRoomsPageState extends State<CourtRoomsPage> {
 
   @override
   Widget build(BuildContext context) {
-    if (selectedChannel != null) return _channelDetails();
+    if (selectedChannel != null) {
+      return PopScope(
+        canPop: false,
+        onPopInvokedWithResult: (didPop, result) {
+          if (didPop) return;
+          setState(() => selectedChannel = null);
+        },
+        child: _channelDetails(),
+      );
+    }
 
     final availableChannels = (apiCourts != null && apiCourts!.isNotEmpty)
         ? apiCourts!
@@ -450,16 +459,20 @@ class _CourtRoomsPageState extends State<CourtRoomsPage> {
                 child: ListView(
                   padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
                   children: [
-                    if (loading) const LinearProgressIndicator(minHeight: 2),
-                    if (error != null) ...[
-                      Surface(
-                        color: paleBronze,
-                        child: Text(
-                          'Could not refresh courts: $error',
-                          style: const TextStyle(color: muted, fontSize: 11),
+                    if (loading && filtered.isEmpty)
+                      const ChatConversationShimmerList()
+                    else ...[
+                      if (loading) const LinearProgressIndicator(minHeight: 2),
+                      if (error != null) ...[
+                        Surface(
+                          color: paleBronze,
+                          child: Text(
+                            'Could not refresh courts: $error',
+                            style: const TextStyle(color: muted, fontSize: 11),
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 10),
+                        const SizedBox(height: 10),
+                      ],
                     ],
                     for (final channel in filtered) ...[
                       _CourtChannelCard(

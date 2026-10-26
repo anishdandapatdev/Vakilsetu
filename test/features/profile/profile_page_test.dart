@@ -190,7 +190,7 @@ void main() {
       await tester.enterText(phoneField, '+91 99999 88888');
 
       // Tap save
-      final saveBtn = find.text('Save to Cloud Firestore');
+      final saveBtn = find.text('Save Changes');
       expect(saveBtn, findsOneWidget);
       await tester.tap(saveBtn);
       await tester.pumpAndSettle();
@@ -233,7 +233,7 @@ void main() {
       expect(find.text('Avatar Appearance'), findsNothing);
     });
 
-    testWidgets('tapping credentials and chamber rows opens detailed dialogs', (tester) async {
+    testWidgets('tapping credentials and chamber rows opens dedicated detail screens', (tester) async {
       tester.view.physicalSize = const Size(600, 1200);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(() => tester.view.resetPhysicalSize());
@@ -244,27 +244,72 @@ void main() {
       await tester.pumpWidget(buildTestWidget(store: store, repo: mockRepo));
       await tester.pumpAndSettle();
 
-      // Tap credentials row
+      // Tap credentials row -> opens BarCouncilCredentialsScreen
       await tester.tap(find.text('Bar Council Credentials'));
       await tester.pumpAndSettle();
 
       expect(find.text('Bar Council Credentials'), findsWidgets);
-      expect(find.textContaining('Digitally signed via Cloud Firestore.'), findsOneWidget);
+      expect(find.text('REGISTRATION DETAILS'), findsOneWidget);
+      expect(find.text('Digitally Verified Credential'), findsOneWidget);
+      expect(find.text('Edit Bar Credentials'), findsOneWidget);
 
-      // Dismiss dialog
-      await tester.tap(find.text('OK'));
+      // Dismiss / go back
+      await tester.tap(find.byTooltip('Back'));
       await tester.pumpAndSettle();
 
-      // Tap chamber address row
+      // Tap chamber address row -> opens ChamberAddressScreen
       await tester.tap(find.text('Court & Chamber Address'));
       await tester.pumpAndSettle();
 
-      expect(find.text('Court & Chambers'), findsOneWidget);
-      expect(find.textContaining('Primary Court:'), findsOneWidget);
+      expect(find.text('Court & Chamber Address'), findsOneWidget);
+      expect(find.text('CHAMBER OFFICE DETAILS'), findsOneWidget);
+      expect(find.text('PRIMARY JURISDICTION'), findsOneWidget);
+      expect(find.text('Update Chamber & Contact'), findsOneWidget);
 
-      // Dismiss dialog
-      await tester.tap(find.text('OK'));
+      // Dismiss / go back
+      await tester.tap(find.byTooltip('Back'));
       await tester.pumpAndSettle();
+    });
+
+    testWidgets('account & sync status and dark mode are removed, and language screen shows only English', (tester) async {
+      tester.view.physicalSize = const Size(600, 1400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      final store = DemoStore();
+      final mockRepo = MockProfileRepository();
+
+      await tester.pumpWidget(buildTestWidget(store: store, repo: mockRepo));
+      await tester.pumpAndSettle();
+
+      // Verify Account & Sync Status and Dark Mode are NOT present
+      expect(find.text('Account & Sync Status'), findsNothing);
+      expect(find.text('Dark Mode'), findsNothing);
+
+      // Scroll to App Settings and find Language
+      final languageRow = find.text('Language');
+      expect(languageRow, findsOneWidget);
+
+      // Tap Language row
+      await tester.tap(languageRow);
+      await tester.pumpAndSettle();
+
+      // Verify AppLanguageScreen opened
+      expect(find.text('App Language'), findsOneWidget);
+      expect(find.text('Court & App Language'), findsOneWidget);
+      expect(find.text('English (India)'), findsOneWidget);
+      expect(find.text('ACTIVE'), findsOneWidget);
+      expect(find.text('Confirm English (Standard)'), findsOneWidget);
+
+      // Verify no other languages like Hindi, Marathi, etc. are listed
+      expect(find.text('Hindi'), findsNothing);
+      expect(find.text('Bengali'), findsNothing);
+
+      // Tap confirm button to dismiss
+      await tester.tap(find.text('Confirm English (Standard)'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Court & App Language'), findsNothing);
     });
 
     testWidgets('tapping log out prompts confirmation dialog', (tester) async {

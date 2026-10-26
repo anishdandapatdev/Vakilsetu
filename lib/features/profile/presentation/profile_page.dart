@@ -6,6 +6,7 @@ import '../../../design_system/ui.dart';
 import '../../authentication/presentation/login_page.dart';
 import '../data/firebase_profile_repository.dart';
 import '../domain/advocate_profile.dart';
+import 'profile_detail_screens.dart';
 
 class _AvatarTheme {
   final String name;
@@ -58,7 +59,7 @@ class _ProfilePageState extends State<ProfilePage> {
   late String court;
   int avatar = 0;
   bool saving = false;
-  bool darkModePreview = false;
+  bool loadingProfile = false;
   Map<String, String> courtIds = const {};
   late ProfileRepository _repo;
 
@@ -104,6 +105,7 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 
   Future<void> _loadInitialData() async {
+    if (mounted) setState(() => loadingProfile = true);
     try {
       final courts = await _repo.listCourtIdsByName();
       if (mounted) setState(() => courtIds = courts);
@@ -153,6 +155,8 @@ class _ProfilePageState extends State<ProfilePage> {
       }
     } catch (e) {
       debugPrint('Error loading profile data: $e');
+    } finally {
+      if (mounted) setState(() => loadingProfile = false);
     }
   }
 
@@ -189,7 +193,7 @@ class _ProfilePageState extends State<ProfilePage> {
         avatar: avatar,
       );
       if (!mounted) return;
-      toast(context, 'Profile updated in Cloud Firestore · Verified advocate');
+      toast(context, 'Profile updated successfully · Verified advocate');
       widget.onSaved();
     } on Object catch (error) {
       if (mounted) toast(context, 'Could not save profile: $error');
@@ -205,7 +209,7 @@ class _ProfilePageState extends State<ProfilePage> {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
         title: const Text('Sign out of VakilSetu?'),
         content: const Text(
-          'You will be returned to the login screen. Your advocate profile and channel data remain saved in Cloud Firestore.',
+          'You will be returned to the login screen. Your advocate profile and channel subscriptions remain safely synced to your account.',
         ),
         actions: [
           TextButton(
@@ -575,7 +579,7 @@ class _ProfilePageState extends State<ProfilePage> {
                         },
                   icon: const Icon(Icons.check_circle_outline_rounded, size: 18),
                   label: Text(
-                    saving ? 'Saving…' : 'Save to Cloud Firestore',
+                    saving ? 'Saving…' : 'Save Changes',
                     style: const TextStyle(fontWeight: FontWeight.w700),
                   ),
                 ),
@@ -583,27 +587,6 @@ class _ProfilePageState extends State<ProfilePage> {
             ),
           ),
         ),
-      ),
-    );
-  }
-
-  void _showInfoDialog(String title, String message) {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-        title: Text(title, style: heading(17)),
-        content: Text(
-          message,
-          style: const TextStyle(fontSize: 13, height: 1.5, color: ink),
-        ),
-        actions: [
-          FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: navy),
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('OK'),
-          ),
-        ],
       ),
     );
   }
@@ -632,11 +615,6 @@ class _ProfilePageState extends State<ProfilePage> {
   Widget build(BuildContext context) {
     final user = _currentUser;
     final isLoggedIn = user != null && !user.isAnonymous;
-    final userEmail = user?.email ??
-        (user?.isAnonymous == true
-            ? 'Guest Session'
-            : 'local_advocate@vakilsetu.in');
-    final userUid = user?.uid ?? 'local_preview';
     final advocateName = name.text.isEmpty ? widget.store.name : name.text;
     final initials = advocateName
         .split(' ')
@@ -751,7 +729,10 @@ class _ProfilePageState extends State<ProfilePage> {
               ),
               const SizedBox(height: 18),
 
-              // 2. ADVOCATE PROFILE HERO CARD
+              if (loadingProfile && name.text.isEmpty && widget.store.name.isEmpty)
+                const ProfileShimmerSkeleton()
+              else ...[
+                // 2. ADVOCATE PROFILE HERO CARD
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
@@ -1012,9 +993,17 @@ class _ProfilePageState extends State<ProfilePage> {
                     iconColor: teal,
                     title: 'Bar Council Credentials',
                     subtitle: '$activeEnrollment · $activeStateBar',
-                    onTap: () => _showInfoDialog(
-                      'Bar Council Credentials',
-                      'Registration Number: $activeEnrollment\nState Bar: $activeStateBar\nPrimary Court: $court\nExperience: $activeExp Years\nVerification Status: Verified Advocate\nDigitally signed via Cloud Firestore.',
+                    onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => BarCouncilCredentialsScreen(
+                          advocateName: advocateName,
+                          enrollmentNumber: activeEnrollment,
+                          stateBar: activeStateBar,
+                          primaryCourt: court,
+                          experienceYears: activeExp,
+                          onEdit: _openEditPersonalInfo,
+                        ),
+                      ),
                     ),
                   ),
                   _ProfileRow(
@@ -1022,16 +1011,33 @@ class _ProfilePageState extends State<ProfilePage> {
                     iconColor: const Color(0xFF059669),
                     title: 'Contact & Phone',
                     subtitle: activePhone,
-                    onTap: _openEditPersonalInfo,
+                    onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => ChamberAddressScreen(
+                          advocateName: advocateName,
+                          primaryCourt: court,
+                          chamberAddress: activeChamber,
+                          phone: activePhone,
+                          onEdit: _openEditPersonalInfo,
+                        ),
+                      ),
+                    ),
                   ),
                   _ProfileRow(
                     icon: Icons.location_on_outlined,
                     iconColor: const Color(0xFFE65100),
                     title: 'Court & Chamber Address',
                     subtitle: activeChamber,
-                    onTap: () => _showInfoDialog(
-                      'Court & Chambers',
-                      'Primary Court: $court\nChambers: $activeChamber\nCourt Channel ID: ${courtIds[court] ?? "saket_district_court"}',
+                    onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => ChamberAddressScreen(
+                          advocateName: advocateName,
+                          primaryCourt: court,
+                          chamberAddress: activeChamber,
+                          phone: activePhone,
+                          onEdit: _openEditPersonalInfo,
+                        ),
+                      ),
                     ),
                   ),
                 ],
@@ -1046,44 +1052,54 @@ class _ProfilePageState extends State<ProfilePage> {
                     iconColor: navy,
                     title: 'Practice Areas & Specialization',
                     subtitle: practice.text,
-                    onTap: _openEditPersonalInfo,
+                    onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => PracticeSpecializationScreen(
+                          advocateName: advocateName,
+                          practiceAreas: practice.text,
+                          bio: bio.text,
+                          primaryCourt: court,
+                          experienceYears: activeExp,
+                          onEdit: _openEditPersonalInfo,
+                        ),
+                      ),
+                    ),
                   ),
                   _ProfileRow(
                     icon: Icons.folder_open_rounded,
                     iconColor: slateBlue,
                     title: 'Digital Case Files & Documents',
-                    subtitle: 'Encrypted document store & filings',
-                    onTap: () => _showInfoDialog(
-                      'Digital Case Files',
-                      'Access synced court filings, causelists, and shared advocate attachments from your Workspace Documents tab.',
+                    subtitle: 'Encrypted document vault & filings',
+                    onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => CaseFilesDocumentsScreen(
+                          onOpenDocuments: () {
+                            if (widget.onBack != null) widget.onBack!();
+                          },
+                        ),
+                      ),
                     ),
                   ),
                 ],
               ),
 
-              // 7. SECTION: ACCOUNT & SECURITY
-              const _SectionHeader('ACCOUNT & SECURITY'),
+              // 7. SECTION: SECURITY & VERIFICATION
+              const _SectionHeader('SECURITY & VERIFICATION'),
               _SectionCard(
                 children: [
-                  _ProfileRow(
-                    icon: Icons.cloud_done_outlined,
-                    iconColor: teal,
-                    title: 'Firebase Account Status',
-                    subtitle:
-                        '$userEmail (UID: ${userUid.substring(0, userUid.length > 12 ? 12 : userUid.length)}…)',
-                    onTap: () => _showInfoDialog(
-                      'Firebase Session',
-                      'Connected to Firebase Cloud Firestore.\nEmail: $userEmail\nUID: $userUid\nSecurity: Real-time rules enforced.',
-                    ),
-                  ),
                   _ProfileRow(
                     icon: Icons.shield_outlined,
                     iconColor: navy,
                     title: 'Security & Verification',
                     subtitle: 'Official advocate verification badge enabled',
-                    onTap: () => _showInfoDialog(
-                      'Advocate Verification',
-                      'Your digital credentials and bar enrollment are verified on the VakilSetu legal network.',
+                    onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => AdvocateVerificationScreen(
+                          advocateName: advocateName,
+                          enrollmentNumber: activeEnrollment,
+                          stateBar: activeStateBar,
+                        ),
+                      ),
                     ),
                   ),
                 ],
@@ -1110,17 +1126,6 @@ class _ProfilePageState extends State<ProfilePage> {
                     ),
                   ),
                   _ProfileRow(
-                    icon: Icons.dark_mode_outlined,
-                    iconColor: slateBlue,
-                    title: 'Dark Mode',
-                    subtitle: 'Appearance preference',
-                    trailing: Switch.adaptive(
-                      value: darkModePreview,
-                      activeThumbColor: navy,
-                      onChanged: (v) => setState(() => darkModePreview = v),
-                    ),
-                  ),
-                  _ProfileRow(
                     icon: Icons.palette_outlined,
                     iconColor: bronze,
                     title: 'Avatar Theme Preset',
@@ -1132,7 +1137,11 @@ class _ProfilePageState extends State<ProfilePage> {
                     iconColor: teal,
                     title: 'Language',
                     subtitle: 'English (India)',
-                    onTap: () => toast(context, 'Language: English (India)'),
+                    onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => const AppLanguageScreen(),
+                      ),
+                    ),
                   ),
                 ],
               ),
@@ -1144,11 +1153,12 @@ class _ProfilePageState extends State<ProfilePage> {
                   _ProfileRow(
                     icon: Icons.help_outline_rounded,
                     iconColor: navy,
-                    title: 'Help Center',
+                    title: 'Help Center & Support',
                     subtitle: 'Bar Association support & FAQs',
-                    onTap: () => _showInfoDialog(
-                      'Help & Support',
-                      'VakilSetu Advocate Support Desk\nEmail: support@vakilsetu.in\nEmergency Bar Helpline: 1800-VAKIL-SETU',
+                    onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => const HelpCenterScreen(),
+                      ),
                     ),
                   ),
                   _ProfileRow(
@@ -1156,9 +1166,10 @@ class _ProfilePageState extends State<ProfilePage> {
                     iconColor: slateBlue,
                     title: 'Privacy & Security Policy',
                     subtitle: 'Advocate-Client privilege & data policy',
-                    onTap: () => _showInfoDialog(
-                      'Privacy & Terms',
-                      'VakilSetu complies with Bar Council of India standards. Case notes, filings, and communications are restricted to authenticated advocates.',
+                    onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => const PrivacyPolicyScreen(),
+                      ),
                     ),
                   ),
                 ],
@@ -1195,6 +1206,7 @@ class _ProfilePageState extends State<ProfilePage> {
                   ),
                 ),
               ),
+              ],
             ],
           ),
         ),

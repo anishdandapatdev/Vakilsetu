@@ -1,9 +1,37 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:vakilsetu/app/demo_store.dart';
 import 'package:vakilsetu/design_system/ui.dart';
 import 'package:vakilsetu/features/chats/domain/conversation.dart';
+import 'package:vakilsetu/features/chats/domain/server_messaging.dart';
 import 'package:vakilsetu/features/chats/presentation/messages_page.dart';
+
+class _MockChatServerMessaging implements MessagingRepository, ServerMessaging {
+  final Completer<ServerMessagePage> historyCompleter = Completer<ServerMessagePage>();
+
+  @override
+  Future<ServerMessagePage> history(String conversationId, {String? before}) =>
+      historyCompleter.future;
+
+  @override
+  Stream<void> get syncAvailable => const Stream.empty();
+
+  @override
+  Future<void> connectRealtime() async {}
+
+  @override
+  Future<void> retryPending() async {}
+
+  @override
+  Future<List<ConversationSummary>> listConversations() async => [];
+
+  @override
+  Future<void> markRead(String conversationId, String throughMessageId) async {}
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
 
 void main() {
   group('MessagesPage logic tests', () {
@@ -248,5 +276,146 @@ void main() {
       expect(find.text('Gallery & Photo'), findsOneWidget);
       expect(find.text('Document / PDF'), findsOneWidget);
     });
+
+    testWidgets('Pressing phone navigation back button on chat screen closes active chat and returns to conversations list', (tester) async {
+      tester.view.physicalSize = const Size(400, 800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      final store = DemoStore();
+      final room = DemoRoom('room_meera', 'Meera Sharma', 'Private conversation', 'MS');
+      bool? conversationOpenState;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: MessagesPage(
+              store: store,
+              initialRoom: room,
+              onConversationChanged: (open) => conversationOpenState = open,
+            ),
+          ),
+        ),
+      );
+
+      await tester.pumpAndSettle();
+
+      // Verify active chat screen is displayed
+      expect(find.text('Meera Sharma'), findsOneWidget);
+      expect(find.byTooltip('Back to conversations'), findsOneWidget);
+
+      // Simulate tapping Android system/phone navigation back button
+      final didHandlePop = await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+
+      // Back event must be handled by PopScope, closing active room without popping the app route
+      expect(didHandlePop, isTrue);
+      expect(conversationOpenState, isFalse);
+
+      // Verify user is now back on the conversations list
+      expect(find.text('Search conversations'), findsOneWidget);
+      expect(find.byTooltip('Back to conversations'), findsNothing);
+    });
+
+    testWidgets('Sent messages (mine) render with deep green background and white text', (tester) async {
+      tester.view.physicalSize = const Size(400, 800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      final store = DemoStore();
+      final room = DemoRoom('room_contrast', 'Advocate Verma', 'Civil', 'AV');
+      room.messages.addAll([
+        DemoMessage(
+          'Hello from client, this is my sent message',
+          mine: true,
+          createdAt: DateTime.now(),
+        ),
+        DemoMessage(
+          'Hello, this is lawyer reply',
+          mine: false,
+          createdAt: DateTime.now(),
+        ),
+      ]);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: MessagesPage(
+              store: store,
+              initialRoom: room,
+            ),
+          ),
+        ),
+      );
+
+      await tester.pumpAndSettle();
+
+      // Find sent message text widget
+      final sentTextFinder = find.text('Hello from client, this is my sent message');
+      expect(sentTextFinder, findsOneWidget);
+
+      final Text sentTextWidget = tester.widget(sentTextFinder);
+      expect(sentTextWidget.style?.color, equals(Colors.white));
+
+      // Find received message text widget
+      final receivedTextFinder = find.text('Hello, this is lawyer reply');
+      expect(receivedTextFinder, findsOneWidget);
+
+      final Text receivedTextWidget = tester.widget(receivedTextFinder);
+      expect(receivedTextWidget.style?.color, equals(const Color(0xFF0F2644)));
+
+      // Find Container decoration with deep green color
+      final deepGreenContainers = tester.widgetList<Container>(find.byType(Container)).where((container) {
+        final decoration = container.decoration;
+        if (decoration is BoxDecoration) {
+          return decoration.color == const Color(0xFF005C4B);
+        }
+        return false;
+      });
+      expect(deepGreenContainers, isNotEmpty);
+    });
+
+    testWidgets('Active chat displays ChatMessageShimmerList when entering room before messages load', (tester) async {
+      tester.view.physicalSize = const Size(400, 800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      final store = DemoStore();
+      final room = DemoRoom('room_shimmer', 'Advocate Mishra', 'Civil', 'AM');
+      final mockRepo = _MockChatServerMessaging();
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: MessagesPage(
+              store: store,
+              initialRoom: room,
+              repository: mockRepo,
+            ),
+          ),
+        ),
+      );
+
+      // Verify ChatMessageShimmerList is rendered while messages are loading from server
+      expect(find.byType(ChatMessageShimmerList), findsOneWidget);
+
+      // Complete history loading
+      mockRepo.historyCompleter.complete(ServerMessagePage([], null));
+      await tester.pumpAndSettle();
+
+      // Shimmer is gone once messages resolve
+      expect(find.byType(ChatMessageShimmerList), findsNothing);
+    });
   });
 }
+
+

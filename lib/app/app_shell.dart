@@ -363,108 +363,124 @@ class _AppShellState extends State<AppShell> {
           ),
         ],
       );
-      return Scaffold(
-        appBar: wide || selected != 5
-            ? null
-            : AppBar(
-                title: const Brand(small: true),
-                actions: [
-                  IconButton(
-                    tooltip: 'Your profile',
-                    onPressed: () => go(6),
-                    icon: const Icon(Icons.account_circle_outlined),
-                  ),
-                  IconButton(
-                    tooltip: 'Sign Out / Log Out',
-                    onPressed: signOut,
-                    icon: const Icon(Icons.logout_rounded, color: Color(0xFFE53935)),
-                  ),
-                ],
-              ),
-        drawer: wide
-            ? null
-            : Drawer(
-                backgroundColor: Colors.white,
-                child: SafeArea(child: nav()),
-              ),
-        body: Row(
-          children: [
-            if (wide)
-              Container(
-                width: 236,
-                decoration: const BoxDecoration(
-                  color: Colors.white,
-                  border: Border(right: BorderSide(color: line)),
-                ),
-                child: nav(),
-              ),
-            Expanded(
-              child: Column(
-                children: [
-                  if (wide)
-                    Container(
-                      height: 49,
-                      padding: const EdgeInsets.symmetric(horizontal: 30),
-                      decoration: const BoxDecoration(
-                        color: Colors.white,
-                        border: Border(bottom: BorderSide(color: line)),
-                      ),
-                      child: Row(
-                        children: [
-                          Text(
-                            'Workspace  /  ${labels[selected]}',
-                            style: const TextStyle(fontSize: 11, color: muted),
-                          ),
-                          const Spacer(),
-                          Tag(widget.authRepository == null ? 'Local preview' : 'Connected'),
-                          const SizedBox(width: 14),
-                          const SizedBox(width: 8),
-                        ],
-                      ),
+      return PopScope(
+        canPop: selected == 0 && !conversationOpen,
+        onPopInvokedWithResult: (didPop, result) {
+          if (didPop) return;
+          if (conversationOpen) {
+            setState(() {
+              conversationOpen = false;
+              activeRoom = null;
+            });
+            return;
+          }
+          if (selected != 0) {
+            go(0);
+          }
+        },
+        child: Scaffold(
+          appBar: wide || selected != 5
+              ? null
+              : AppBar(
+                  title: const Brand(small: true),
+                  actions: [
+                    IconButton(
+                      tooltip: 'Your profile',
+                      onPressed: () => go(6),
+                      icon: const Icon(Icons.account_circle_outlined),
                     ),
-                  Expanded(child: pages[selected]),
-                ],
-              ),
-            ),
-          ],
-        ),
-        bottomNavigationBar: wide || conversationOpen
-            ? null
-            : SafeArea(
-                minimum: const EdgeInsets.fromLTRB(8, 0, 8, 8),
-                child: Container(
-                  clipBehavior: Clip.antiAlias,
-                  decoration: BoxDecoration(
+                    IconButton(
+                      tooltip: 'Sign Out / Log Out',
+                      onPressed: signOut,
+                      icon: const Icon(Icons.logout_rounded, color: Color(0xFFE53935)),
+                    ),
+                  ],
+                ),
+          drawer: wide
+              ? null
+              : Drawer(
+                  backgroundColor: Colors.white,
+                  child: SafeArea(child: nav()),
+                ),
+          body: Row(
+            children: [
+              if (wide)
+                Container(
+                  width: 236,
+                  decoration: const BoxDecoration(
                     color: Colors.white,
-                    borderRadius: BorderRadius.circular(28),
-                    boxShadow: const [
-                      BoxShadow(
-                        color: Color(0x180B3954),
-                        blurRadius: 22,
-                        offset: Offset(0, 7),
-                      ),
-                    ],
+                    border: Border(right: BorderSide(color: line)),
                   ),
-                  child: NavigationBar(
-                    height: 68,
-                    backgroundColor: Colors.white,
-                    elevation: 0,
-                    indicatorColor: Colors.transparent,
-                    selectedIndex: selected < 5 ? selected : 0,
-                    onDestinationSelected: go,
-                    destinations: [
-                      for (int i = 0; i < 5; i++)
-                        NavigationDestination(
-                          icon: IllustratedIcon(
-                            icons[i],
-                            size: selected == i ? 38 : 34,
-                          ),
-                          label: labels[i],
+                  child: nav(),
+                ),
+              Expanded(
+                child: Column(
+                  children: [
+                    if (wide)
+                      Container(
+                        height: 49,
+                        padding: const EdgeInsets.symmetric(horizontal: 30),
+                        decoration: const BoxDecoration(
+                          color: Colors.white,
+                          border: Border(bottom: BorderSide(color: line)),
                         ),
-                    ],
-                  ),
+                        child: Row(
+                          children: [
+                            Text(
+                              'Workspace  /  ${labels[selected]}',
+                              style: const TextStyle(fontSize: 11, color: muted),
+                            ),
+                            const Spacer(),
+                            Tag(widget.authRepository == null ? 'Local preview' : 'Connected'),
+                            const SizedBox(width: 14),
+                            const SizedBox(width: 8),
+                          ],
+                        ),
+                      ),
+                    Expanded(child: pages[selected]),
+                  ],
                 ),
               ),
+            ],
+          ),
+          bottomNavigationBar: wide || conversationOpen
+              ? null
+              : SafeArea(
+                  minimum: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+                  child: Container(
+                    clipBehavior: Clip.antiAlias,
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(28),
+                      boxShadow: const [
+                        BoxShadow(
+                          color: Color(0x180B3954),
+                          blurRadius: 22,
+                          offset: Offset(0, 7),
+                        ),
+                      ],
+                    ),
+                    child: NavigationBar(
+                      height: 68,
+                      backgroundColor: Colors.white,
+                      elevation: 0,
+                      indicatorColor: Colors.transparent,
+                      selectedIndex: selected < 5 ? selected : 0,
+                      onDestinationSelected: go,
+                      destinations: [
+                        for (int i = 0; i < 5; i++)
+                          NavigationDestination(
+                            icon: IllustratedIcon(
+                              icons[i],
+                              size: selected == i ? 38 : 34,
+                            ),
+                            label: labels[i],
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+        ),
       );
     },
   );

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'legal_icon.dart';
 export 'legal_icon.dart';
+export 'shimmer.dart';
 
 const navy = Color(0xFF1D3557),
     teal = Color(0xFF2A9D8F),

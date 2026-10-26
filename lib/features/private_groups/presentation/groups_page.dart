@@ -692,14 +692,19 @@ class _GroupsPageState extends State<GroupsPage> {
               child: RefreshIndicator(
                 color: const Color(0xFF0870E4),
                 onRefresh: _loadAll,
-                child: filteredGroups.isEmpty
-                    ? ListView(
-                        physics: const AlwaysScrollableScrollPhysics(),
-                        padding: const EdgeInsets.all(24),
-                        children: [
-                          const SizedBox(height: 30),
-                          Center(
-                            child: Column(
+                child: (loading && filteredGroups.isEmpty)
+                    ? const Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                        child: ChatConversationShimmerList(),
+                      )
+                    : filteredGroups.isEmpty
+                        ? ListView(
+                            physics: const AlwaysScrollableScrollPhysics(),
+                            padding: const EdgeInsets.all(24),
+                            children: [
+                              const SizedBox(height: 30),
+                              Center(
+                                child: Column(
                               children: [
                                 Container(
                                   width: 64,

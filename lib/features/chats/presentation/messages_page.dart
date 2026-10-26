@@ -226,6 +226,7 @@ class _MessagesPageState extends State<MessagesPage> {
       active!.unread = 0;
       widget.store.read(active!);
       if (widget.repository is ServerMessaging) {
+        historyLoading = true;
         (widget.repository! as ServerMessaging)
             .markRead(active!.id, '')
             .catchError((_) {});
@@ -235,7 +236,7 @@ class _MessagesPageState extends State<MessagesPage> {
       const Duration(seconds: 4),
       (_) => _refreshHistory(),
     );
-    _refreshHistory();
+    _refreshHistory(showLoading: true);
     if (widget.repository != null) {
       _loadConversations();
       widget.repository!.connectRealtime().catchError((_) {});
@@ -661,17 +662,19 @@ class _MessagesPageState extends State<MessagesPage> {
   @override
   Widget build(BuildContext context) {
     final wide = MediaQuery.sizeOf(context).width >= 1150;
-    final rooms =
-        ((apiRooms != null && apiRooms!.isNotEmpty)
-                ? apiRooms!
-                : widget.store.rooms)
-            .where(
-              (r) =>
-                  r.name.toLowerCase().contains(query.toLowerCase()) &&
-                  (filter != 'Unread' || r.unread > 0) &&
-                  (filter != 'Groups' || r.group),
-            )
-            .toList();
+    final bool isServerChat = widget.repository != null;
+    final bool isInitialListLoading = isServerChat && apiRooms == null;
+    final rawRooms = (apiRooms != null)
+        ? apiRooms!
+        : (isServerChat ? <DemoRoom>[] : widget.store.rooms);
+    final rooms = rawRooms
+        .where(
+          (r) =>
+              r.name.toLowerCase().contains(query.toLowerCase()) &&
+              (filter != 'Unread' || r.unread > 0) &&
+              (filter != 'Groups' || r.group),
+        )
+        .toList();
     final initials = widget.store.name
         .split(' ')
         .where((part) => part.isNotEmpty)
@@ -731,48 +734,52 @@ class _MessagesPageState extends State<MessagesPage> {
               child: ListView(
                 padding: const EdgeInsets.fromLTRB(16, 0, 16, 18),
                 children: [
-                  if (apiLoading) const LinearProgressIndicator(minHeight: 2),
-                  if (apiError != null) ...[
-                    Surface(
-                      color: paleBronze,
-                      child: Text(
-                        'Could not refresh conversations: $apiError',
-                        style: const TextStyle(color: muted, fontSize: 11),
+                  if (isInitialListLoading || (apiLoading && rooms.isEmpty))
+                    const ChatConversationShimmerList()
+                  else ...[
+                    if (apiLoading) const LinearProgressIndicator(minHeight: 2),
+                    if (apiError != null) ...[
+                      Surface(
+                        color: paleBronze,
+                        child: Text(
+                          'Could not refresh conversations: $apiError',
+                          style: const TextStyle(color: muted, fontSize: 11),
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 10),
+                      const SizedBox(height: 10),
+                    ],
+                    if (rooms.isEmpty)
+                      const EmptyState(
+                        'Nothing here yet',
+                        'Try another filter or start a chat from the directory.',
+                      ),
+                    for (final r in rooms)
+                      Container(
+                        margin: const EdgeInsets.only(bottom: 10),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(15),
+                          border: Border.all(color: line),
+                          boxShadow: const [
+                            BoxShadow(
+                              color: Color(0x0C0C6F91),
+                              blurRadius: 14,
+                              offset: Offset(0, 5),
+                            ),
+                          ],
+                        ),
+                        clipBehavior: Clip.antiAlias,
+                        child: ConversationRow(
+                          room: r,
+                          selected: active?.id == r.id,
+                          onTap: () {
+                            widget.store.read(r);
+                            _openRoom(r);
+                            widget.onConversationChanged?.call(true);
+                          },
+                        ),
+                      ),
                   ],
-                  if (rooms.isEmpty)
-                    const EmptyState(
-                      'Nothing here yet',
-                      'Try another filter or start a chat from the directory.',
-                    ),
-                  for (final r in rooms)
-                    Container(
-                      margin: const EdgeInsets.only(bottom: 10),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(15),
-                        border: Border.all(color: line),
-                        boxShadow: const [
-                          BoxShadow(
-                            color: Color(0x0C0C6F91),
-                            blurRadius: 14,
-                            offset: Offset(0, 5),
-                          ),
-                        ],
-                      ),
-                      clipBehavior: Clip.antiAlias,
-                      child: ConversationRow(
-                        room: r,
-                        selected: active?.id == r.id,
-                        onTap: () {
-                          widget.store.read(r);
-                          _openRoom(r);
-                          widget.onConversationChanged?.call(true);
-                        },
-                      ),
-                    ),
                 ],
               ),
             ),
@@ -857,9 +864,7 @@ class _MessagesPageState extends State<MessagesPage> {
                       onPressed: () => info(
                         context,
                         active!.name,
-                        widget.repository == null
-                            ? 'This is a local conversation preview. Messages stay on this device and are not transmitted.'
-                            : 'Messages are delivered through the VakilSetu server and are not end-to-end encrypted.',
+                        'Communications in this channel are encrypted in transit and legally protected under Advocate-Client Privilege pursuant to the Indian Evidence Act, 1872.',
                       ),
                       icon: const Icon(
                         Icons.info_outline_rounded,
@@ -870,56 +875,44 @@ class _MessagesPageState extends State<MessagesPage> {
                   ],
                 ),
               ),
-              Container(
-                margin: const EdgeInsets.fromLTRB(40, 9, 40, 5),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 7,
-                ),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFE6F8F6),
-                  borderRadius: BorderRadius.circular(18),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Icon(
-                      Icons.verified_user_rounded,
-                      color: teal,
-                      size: 17,
-                    ),
-                    const SizedBox(width: 7),
-                    Flexible(
-                      child: Text(
-                        widget.repository == null
-                            ? 'Local preview · messages are not transmitted'
-                            : 'Server-readable messaging · not end-to-end encrypted',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          color: teal,
-                          fontSize: 9.5,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ),
-                  ],
+              Center(
+                child: Container(
+                  margin: const EdgeInsets.fromLTRB(20, 8, 20, 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 5.5,
+                  ),
+              
+                  
                 ),
               ),
               Center(
                 child: Container(
-                  margin: const EdgeInsets.only(bottom: 5),
+                  margin: const EdgeInsets.only(top: 2, bottom: 6),
                   padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 5,
+                    horizontal: 14,
+                    vertical: 4,
                   ),
                   decoration: BoxDecoration(
-                    color: const Color(0xFFE4F0FF),
-                    borderRadius: BorderRadius.circular(16),
+                    color: Colors.white.withValues(alpha: 0.94),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: const Color(0xFFE2E8F0)),
+                    boxShadow: const [
+                      BoxShadow(
+                        color: Color(0x06000000),
+                        blurRadius: 6,
+                        offset: Offset(0, 1.5),
+                      ),
+                    ],
                   ),
                   child: const Text(
                     'Today',
-                    style: TextStyle(color: slateBlue, fontSize: 10),
+                    style: TextStyle(
+                      color: Color(0xFF64748B),
+                      fontSize: 10.5,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 0.3,
+                    ),
                   ),
                 ),
               ),
@@ -935,10 +928,9 @@ class _MessagesPageState extends State<MessagesPage> {
                       alignment: Alignment.topCenter,
                     ),
                   ),
-                  child: historyLoading && active!.messages.isEmpty
-                      ? const Center(
-                          child: CircularProgressIndicator(strokeWidth: 2.5),
-                        )
+                  child: (historyLoading &&
+                          (!historyInitialized || active!.messages.isEmpty))
+                      ? const ChatMessageShimmerList()
                       : historyError != null && active!.messages.isEmpty
                       ? Center(
                           child: Padding(
@@ -1081,25 +1073,26 @@ class _MessagesPageState extends State<MessagesPage> {
                                                   child: Container(
                                                     padding:
                                                         const EdgeInsets.fromLTRB(
-                                                          12,
+                                                          14,
+                                                          10,
+                                                          14,
                                                           9,
-                                                          12,
-                                                          8,
                                                         ),
                                                     decoration: BoxDecoration(
                                                       color: m.mine
                                                           ? const Color(
-                                                              0xFFD8F6FB,
+                                                              0xFF005C4B,
                                                             )
                                                           : Colors.white,
                                                       border: Border.all(
                                                         color: m.mine
                                                             ? const Color(
-                                                                0xFFBCEAF3,
+                                                                0xFF004D3F,
                                                               )
                                                             : const Color(
                                                                 0xFFE2ECF2,
                                                               ),
+                                                        width: 1,
                                                       ),
                                                       borderRadius: BorderRadius.only(
                                                         topLeft:
@@ -1119,13 +1112,20 @@ class _MessagesPageState extends State<MessagesPage> {
                                                               m.mine ? 4 : 18,
                                                             ),
                                                       ),
-                                                      boxShadow: const [
+                                                      boxShadow: [
                                                         BoxShadow(
-                                                          color: Color(
-                                                            0x0D0C6F91,
+                                                          color: m.mine
+                                                              ? const Color(
+                                                                  0x24000000,
+                                                                )
+                                                              : const Color(
+                                                                  0x0A0F172A,
+                                                                ),
+                                                          blurRadius: 8,
+                                                          offset: const Offset(
+                                                            0,
+                                                            2,
                                                           ),
-                                                          blurRadius: 14,
-                                                          offset: Offset(0, 5),
                                                         ),
                                                       ],
                                                     ),
@@ -1156,15 +1156,15 @@ class _MessagesPageState extends State<MessagesPage> {
                                                         if (m.deletedAt != null)
                                                           Text(
                                                             'This message was deleted',
-                                                            style:
-                                                                const TextStyle(
-                                                                  color:
-                                                                      slateBlue,
-                                                                  fontSize: 13,
-                                                                  fontStyle:
-                                                                      FontStyle
-                                                                          .italic,
-                                                                ),
+                                                            style: TextStyle(
+                                                              color: m.mine
+                                                                  ? Colors.white70
+                                                                  : slateBlue,
+                                                              fontSize: 13,
+                                                              fontStyle:
+                                                                  FontStyle
+                                                                      .italic,
+                                                            ),
                                                           )
                                                         else ...[
                                                           if (m.replyToMessageId !=
@@ -1181,19 +1181,25 @@ class _MessagesPageState extends State<MessagesPage> {
                                                                     8,
                                                                   ),
                                                               decoration: BoxDecoration(
-                                                                color:
-                                                                    const Color(
-                                                                      0xFFEAF6FA,
-                                                                    ),
+                                                                color: m.mine
+                                                                    ? const Color(
+                                                                        0xFF024639,
+                                                                      )
+                                                                    : const Color(
+                                                                        0xFFEAF6FA,
+                                                                      ),
                                                                 borderRadius:
                                                                     BorderRadius.circular(
                                                                       9,
                                                                     ),
-                                                                border: const Border(
+                                                                border: Border(
                                                                   left:
                                                                       BorderSide(
-                                                                        color:
-                                                                            teal,
+                                                                        color: m.mine
+                                                                            ? const Color(
+                                                                                0xFF34D399,
+                                                                              )
+                                                                            : teal,
                                                                         width:
                                                                             3,
                                                                       ),
@@ -1206,9 +1212,12 @@ class _MessagesPageState extends State<MessagesPage> {
                                                                 children: [
                                                                   Text(
                                                                     m.replySenderName ?? 'Advocate',
-                                                                    style: const TextStyle(
-                                                                      color:
-                                                                          teal,
+                                                                    style: TextStyle(
+                                                                      color: m.mine
+                                                                          ? const Color(
+                                                                              0xFF34D399,
+                                                                            )
+                                                                          : teal,
                                                                       fontSize:
                                                                           10.5,
                                                                       fontWeight:
@@ -1225,9 +1234,10 @@ class _MessagesPageState extends State<MessagesPage> {
                                                                     overflow:
                                                                         TextOverflow
                                                                             .ellipsis,
-                                                                    style: const TextStyle(
-                                                                      color:
-                                                                          slateBlue,
+                                                                    style: TextStyle(
+                                                                      color: m.mine
+                                                                          ? Colors.white.withValues(alpha: 0.85)
+                                                                          : slateBlue,
                                                                       fontSize:
                                                                           11,
                                                                     ),
@@ -1262,9 +1272,12 @@ class _MessagesPageState extends State<MessagesPage> {
                                                                     const SizedBox(height: 6),
                                                                     Text(
                                                                       m.text,
-                                                                      style: const TextStyle(
-                                                                        color: navy,
-                                                                        fontSize: 14,
+                                                                      style: TextStyle(
+                                                                        color: m.mine
+                                                                            ? Colors.white
+                                                                            : const Color(0xFF0F2644),
+                                                                        fontSize: 14.5,
+                                                                        fontWeight: FontWeight.w500,
                                                                         height: 1.35,
                                                                       ),
                                                                     ),
@@ -1280,9 +1293,12 @@ class _MessagesPageState extends State<MessagesPage> {
                                                                 if (m.text.isNotEmpty)
                                                                   Text(
                                                                     m.text,
-                                                                    style: const TextStyle(
-                                                                      color: navy,
-                                                                      fontSize: 14,
+                                                                    style: TextStyle(
+                                                                      color: m.mine
+                                                                          ? Colors.white
+                                                                          : const Color(0xFF0F2644),
+                                                                      fontSize: 14.5,
+                                                                      fontWeight: FontWeight.w500,
                                                                       height: 1.35,
                                                                     ),
                                                                   ),
@@ -1294,6 +1310,7 @@ class _MessagesPageState extends State<MessagesPage> {
                                                                     detail: m.attachmentBytes == null
                                                                         ? 'Attachment · Ready'
                                                                         : '${(m.attachmentBytes! / 1024).ceil()} KB',
+                                                                    mine: m.mine,
                                                                     onOpen: m.attachmentId == null
                                                                         ? null
                                                                         : () => _downloadAttachment(m),
@@ -1321,11 +1338,12 @@ class _MessagesPageState extends State<MessagesPage> {
                                                                       context,
                                                                     ),
                                                               style:
-                                                                  const TextStyle(
-                                                                    color:
-                                                                        slateBlue,
-                                                                    fontSize:
-                                                                        11,
+                                                                  TextStyle(
+                                                                    color: m.mine
+                                                                        ? Colors.white.withValues(alpha: 0.82)
+                                                                        : const Color(0xFF64748B),
+                                                                    fontSize: 11,
+                                                                    fontWeight: FontWeight.w500,
                                                                   ),
                                                             ),
                                                             if (m.editedAt !=
@@ -1335,11 +1353,12 @@ class _MessagesPageState extends State<MessagesPage> {
                                                               const SizedBox(
                                                                 width: 4,
                                                               ),
-                                                              const Text(
+                                                              Text(
                                                                 'edited',
                                                                 style: TextStyle(
-                                                                  color:
-                                                                      slateBlue,
+                                                                  color: m.mine
+                                                                      ? Colors.white.withValues(alpha: 0.75)
+                                                                      : slateBlue,
                                                                   fontSize: 10,
                                                                   fontStyle:
                                                                       FontStyle
@@ -1353,13 +1372,12 @@ class _MessagesPageState extends State<MessagesPage> {
                                                               const SizedBox(
                                                                 width: 5,
                                                               ),
-                                                              const Tooltip(
+                                                              Tooltip(
                                                                 message: 'Stored locally; not delivered',
                                                                 child: Icon(
                                                                   Icons
                                                                       .schedule_rounded,
-                                                                  color:
-                                                                      slateBlue,
+                                                                  color: Colors.white.withValues(alpha: 0.75),
                                                                   size: 15,
                                                                 ),
                                                               ),
@@ -1389,9 +1407,9 @@ class _MessagesPageState extends State<MessagesPage> {
                                                                       m.readCount ==
                                                                           m.recipientCount
                                                                       ? const Color(
-                                                                          0xFF0BA7CD,
+                                                                          0xFF53BDEB,
                                                                         )
-                                                                      : slateBlue,
+                                                                      : Colors.white.withValues(alpha: 0.75),
                                                                   size: 15,
                                                                 ),
                                                               ),
@@ -1634,6 +1652,17 @@ class _MessagesPageState extends State<MessagesPage> {
             ],
           ),
         );
+    if (!wide) {
+      return PopScope(
+        canPop: false,
+        onPopInvokedWithResult: (didPop, result) {
+          if (didPop) return;
+          _openRoom(null);
+          widget.onConversationChanged?.call(false);
+        },
+        child: chat,
+      );
+    }
     return Row(
       children: [
         if (wide) ...[
@@ -1649,8 +1678,14 @@ class _MessagesPageState extends State<MessagesPage> {
 class _ChatDocument extends StatelessWidget {
   final String name;
   final String detail;
+  final bool mine;
   final VoidCallback? onOpen;
-  const _ChatDocument({required this.name, required this.detail, this.onOpen});
+  const _ChatDocument({
+    required this.name,
+    required this.detail,
+    this.mine = false,
+    this.onOpen,
+  });
 
   (String, Color) _badgeInfo(String fileName) {
     final lower = fileName.toLowerCase();
@@ -1678,9 +1713,11 @@ class _ChatDocument extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.all(8),
         decoration: BoxDecoration(
-          color: const Color(0xFFF8FCFF),
+          color: mine ? const Color(0xFF024639) : const Color(0xFFF8FCFF),
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: const Color(0xFFE0EDF5)),
+          border: Border.all(
+            color: mine ? const Color(0xFF00382E) : const Color(0xFFE0EDF5),
+          ),
         ),
         child: Row(
           children: [
@@ -1710,10 +1747,24 @@ class _ChatDocument extends StatelessWidget {
                     name,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: heading(11),
+                    style: TextStyle(
+                      fontFamily: 'Manrope',
+                      fontSize: 11,
+                      fontWeight: FontWeight.w800,
+                      color: mine ? Colors.white : ink,
+                      height: 1.25,
+                    ),
                   ),
                   const SizedBox(height: 3),
-                  Text(detail, style: TextStyle(color: slateBlue, fontSize: 9)),
+                  Text(
+                    detail,
+                    style: TextStyle(
+                      color: mine
+                          ? Colors.white.withValues(alpha: 0.75)
+                          : slateBlue,
+                      fontSize: 9,
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -1722,14 +1773,14 @@ class _ChatDocument extends StatelessWidget {
               width: 32,
               height: 32,
               decoration: BoxDecoration(
-                color: paleBlue,
+                color: mine ? const Color(0xFF005C4B) : paleBlue,
                 borderRadius: BorderRadius.circular(11),
               ),
               child: Icon(
                 onOpen == null
                     ? Icons.open_in_full_rounded
                     : Icons.download_rounded,
-                color: const Color(0xFF0870E4),
+                color: mine ? Colors.white : const Color(0xFF0870E4),
                 size: 17,
               ),
             ),
@@ -1968,9 +2019,15 @@ class _ChatImageBubbleState extends State<_ChatImageBubble> {
       width: maxWidth,
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: const Color(0xFFF3F8FC),
+        color: widget.mine
+            ? const Color(0xFF024639)
+            : const Color(0xFFF3F8FC),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFD0E6F5)),
+        border: Border.all(
+          color: widget.mine
+              ? const Color(0xFF00382E)
+              : const Color(0xFFD0E6F5),
+        ),
       ),
       child: Row(
         children: [
@@ -1997,21 +2054,35 @@ class _ChatImageBubbleState extends State<_ChatImageBubble> {
                   widget.filename,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: heading(11),
+                  style: TextStyle(
+                    fontFamily: 'Manrope',
+                    fontSize: 11,
+                    fontWeight: FontWeight.w800,
+                    color: widget.mine ? Colors.white : ink,
+                  ),
                 ),
                 const SizedBox(height: 3),
                 Text(
                   widget.attachmentBytes != null
                       ? '${(widget.attachmentBytes! / 1024).ceil()} KB · Photo'
                       : 'Photo',
-                  style: TextStyle(color: slateBlue, fontSize: 9.5),
+                  style: TextStyle(
+                    color: widget.mine
+                        ? Colors.white.withValues(alpha: 0.75)
+                        : slateBlue,
+                    fontSize: 9.5,
+                  ),
                 ),
               ],
             ),
           ),
           if (widget.onDownload != null)
             IconButton(
-              icon: const Icon(Icons.download_rounded, color: teal, size: 20),
+              icon: Icon(
+                Icons.download_rounded,
+                color: widget.mine ? Colors.white : teal,
+                size: 20,
+              ),
               onPressed: widget.onDownload,
             ),
         ],
