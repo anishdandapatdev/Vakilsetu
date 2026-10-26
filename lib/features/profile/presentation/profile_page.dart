@@ -7,12 +7,29 @@ import '../../authentication/presentation/login_page.dart';
 import '../data/firebase_profile_repository.dart';
 import '../domain/advocate_profile.dart';
 
+class _AvatarTheme {
+  final String name;
+  final Color bgColor;
+  final Color textColor;
+  const _AvatarTheme(this.name, this.bgColor, this.textColor);
+}
+
+const _avatarThemes = [
+  _AvatarTheme('Navy Sapphire', Color(0xFF1D3557), Color(0xFFE2F0FE)),
+  _AvatarTheme('Emerald Teal', Color(0xFF0F766E), Color(0xFFCCFBF1)),
+  _AvatarTheme('Warm Bronze', Color(0xFFB45309), Color(0xFFFEF3C7)),
+  _AvatarTheme('Royal Slate', Color(0xFF334155), Color(0xFFF1F5F9)),
+  _AvatarTheme('Ruby Crimson', Color(0xFF9F1239), Color(0xFFFFE4E6)),
+  _AvatarTheme('Imperial Purple', Color(0xFF6B21A8), Color(0xFFF3E8FF)),
+];
+
 class ProfilePage extends StatefulWidget {
   final DemoStore store;
   final VoidCallback onSaved;
   final VoidCallback? onBack;
   final VoidCallback? onSignOut;
   final ProfileRepository? repository;
+  final FirebaseAuth? auth;
 
   const ProfilePage({
     super.key,
@@ -21,6 +38,7 @@ class ProfilePage extends StatefulWidget {
     this.onBack,
     this.onSignOut,
     this.repository,
+    this.auth,
   });
 
   @override
@@ -29,7 +47,14 @@ class ProfilePage extends StatefulWidget {
 
 class _ProfilePageState extends State<ProfilePage> {
   final form = GlobalKey<FormState>();
-  late TextEditingController name, enrollment, practice, bio;
+  late TextEditingController name;
+  late TextEditingController enrollment;
+  late TextEditingController practice;
+  late TextEditingController bio;
+  late TextEditingController phone;
+  late TextEditingController experienceYears;
+  late TextEditingController stateBar;
+  late TextEditingController chamberAddress;
   late String court;
   int avatar = 0;
   bool saving = false;
@@ -37,7 +62,22 @@ class _ProfilePageState extends State<ProfilePage> {
   Map<String, String> courtIds = const {};
   late ProfileRepository _repo;
 
-  User? get _currentUser => FirebaseAuth.instance.currentUser;
+  FirebaseAuth? get _auth {
+    if (widget.auth != null) return widget.auth;
+    try {
+      return FirebaseAuth.instance;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  User? get _currentUser {
+    try {
+      return _auth?.currentUser;
+    } catch (_) {
+      return null;
+    }
+  }
 
   @override
   void initState() {
@@ -45,13 +85,22 @@ class _ProfilePageState extends State<ProfilePage> {
     _repo = widget.repository ?? FirebaseProfileRepository();
     name = TextEditingController(text: widget.store.name);
     enrollment = TextEditingController(text: widget.store.enrollment);
-    practice = TextEditingController(text: 'Civil litigation · Arbitration');
-    bio = TextEditingController(
-      text: 'Practicing advocate registered with Bar Council of Delhi.',
+    practice = TextEditingController(text: widget.store.practiceAreas);
+    bio = TextEditingController(text: widget.store.bio);
+    phone = TextEditingController(text: widget.store.phone);
+    experienceYears = TextEditingController(
+      text: '${widget.store.experienceYears}',
     );
+    stateBar = TextEditingController(text: widget.store.stateBar);
+    chamberAddress = TextEditingController(text: widget.store.chamberAddress);
     court = widget.store.court;
     avatar = widget.store.avatar;
+    widget.store.addListener(_onStoreChanged);
     _loadInitialData();
+  }
+
+  void _onStoreChanged() {
+    if (mounted) setState(() {});
   }
 
   Future<void> _loadInitialData() async {
@@ -75,7 +124,32 @@ class _ProfilePageState extends State<ProfilePage> {
           if (myProfile.bio != null && myProfile.bio!.isNotEmpty) {
             bio.text = myProfile.bio!;
           }
+          if (myProfile.phone != null && myProfile.phone!.isNotEmpty) {
+            phone.text = myProfile.phone!;
+          }
+          if (myProfile.experienceYears != null) {
+            experienceYears.text = '${myProfile.experienceYears}';
+          }
+          if (myProfile.stateBar != null && myProfile.stateBar!.isNotEmpty) {
+            stateBar.text = myProfile.stateBar!;
+          }
+          if (myProfile.chamberAddress != null &&
+              myProfile.chamberAddress!.isNotEmpty) {
+            chamberAddress.text = myProfile.chamberAddress!;
+          }
         });
+
+        widget.store.updateProfile(
+          name.text,
+          enrollment.text,
+          court,
+          phone: phone.text,
+          experienceYears: int.tryParse(experienceYears.text),
+          stateBar: stateBar.text,
+          chamberAddress: chamberAddress.text,
+          practiceAreas: practice.text,
+          bio: bio.text,
+        );
       }
     } catch (e) {
       debugPrint('Error loading profile data: $e');
@@ -83,7 +157,8 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 
   Future<void> _save() async {
-    final primaryCourtId = courtIds[court] ?? 'delhi_high_court';
+    final primaryCourtId = courtIds[court] ?? 'saket_district_court';
+    final parsedExp = int.tryParse(experienceYears.text.trim()) ?? 7;
 
     setState(() => saving = true);
     try {
@@ -94,6 +169,10 @@ class _ProfilePageState extends State<ProfilePage> {
           primaryCourtId: primaryCourtId,
           practiceAreas: practice.text.trim(),
           bio: bio.text.trim(),
+          experienceYears: parsedExp,
+          phone: phone.text.trim(),
+          chamberAddress: chamberAddress.text.trim(),
+          stateBar: stateBar.text.trim(),
         ),
       );
       widget.store.avatar = avatar;
@@ -101,6 +180,13 @@ class _ProfilePageState extends State<ProfilePage> {
         name.text.trim(),
         enrollment.text.trim(),
         court,
+        phone: phone.text.trim(),
+        experienceYears: parsedExp,
+        stateBar: stateBar.text.trim(),
+        chamberAddress: chamberAddress.text.trim(),
+        practiceAreas: practice.text.trim(),
+        bio: bio.text.trim(),
+        avatar: avatar,
       );
       if (!mounted) return;
       toast(context, 'Profile updated in Cloud Firestore · Verified advocate');
@@ -140,7 +226,7 @@ class _ProfilePageState extends State<ProfilePage> {
     if (confirm != true) return;
 
     try {
-      await FirebaseAuth.instance.signOut();
+      await _auth?.signOut();
     } catch (_) {}
 
     if (widget.onSignOut != null) {
@@ -157,6 +243,169 @@ class _ProfilePageState extends State<ProfilePage> {
   void _openLogin() {
     Navigator.of(context).push(
       MaterialPageRoute(builder: (_) => const LoginPage()),
+    );
+  }
+
+  void _openAvatarCustomizer() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setSheetState) {
+          final initials = (name.text.isEmpty ? widget.store.name : name.text)
+              .split(' ')
+              .where((s) => s.isNotEmpty)
+              .map((s) => s[0].toUpperCase())
+              .take(2)
+              .join();
+          final currentTheme = _avatarThemes[avatar % _avatarThemes.length];
+
+          return Container(
+            padding: const EdgeInsets.fromLTRB(22, 20, 22, 32),
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Center(
+                  child: Container(
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFD4E1EA),
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Text('Avatar Appearance', style: heading(18)),
+                    const Spacer(),
+                    IconButton(
+                      icon: const Icon(Icons.close_rounded, color: muted),
+                      onPressed: () => Navigator.pop(ctx),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                Center(
+                  child: Container(
+                    width: 80,
+                    height: 80,
+                    decoration: BoxDecoration(
+                      color: currentTheme.bgColor,
+                      shape: BoxShape.circle,
+                      boxShadow: [
+                        BoxShadow(
+                          color: currentTheme.bgColor.withValues(alpha: 0.3),
+                          blurRadius: 16,
+                          offset: const Offset(0, 6),
+                        ),
+                      ],
+                    ),
+                    alignment: Alignment.center,
+                    child: Text(
+                      initials.isEmpty ? 'AK' : initials,
+                      style: TextStyle(
+                        fontFamily: 'Manrope',
+                        fontWeight: FontWeight.w800,
+                        fontSize: 26,
+                        color: currentTheme.textColor,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Center(
+                  child: Text(
+                    currentTheme.name,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: navy,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 20),
+                const Text(
+                  'SELECT PALETTE PRESET',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: slateBlue,
+                    letterSpacing: 1.1,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 12,
+                  runSpacing: 12,
+                  alignment: WrapAlignment.center,
+                  children: List.generate(_avatarThemes.length, (idx) {
+                    final theme = _avatarThemes[idx];
+                    final isSelected = avatar == idx;
+                    return GestureDetector(
+                      onTap: () {
+                        setSheetState(() => avatar = idx);
+                        setState(() => avatar = idx);
+                        widget.store.avatar = idx;
+                        widget.store.refresh();
+                      },
+                      child: Container(
+                        width: 44,
+                        height: 44,
+                        decoration: BoxDecoration(
+                          color: theme.bgColor,
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: isSelected
+                                ? const Color(0xFFF5B942)
+                                : Colors.white,
+                            width: isSelected ? 3 : 1.5,
+                          ),
+                          boxShadow: const [
+                            BoxShadow(
+                              color: Color(0x14000000),
+                              blurRadius: 6,
+                              offset: Offset(0, 2),
+                            ),
+                          ],
+                        ),
+                        child: isSelected
+                            ? const Icon(
+                                Icons.check_rounded,
+                                color: Colors.white,
+                                size: 22,
+                              )
+                            : null,
+                      ),
+                    );
+                  }),
+                ),
+                const SizedBox(height: 24),
+                FilledButton(
+                  style: FilledButton.styleFrom(
+                    backgroundColor: navy,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text(
+                    'Done',
+                    style: TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
     );
   }
 
@@ -220,20 +469,35 @@ class _ProfilePageState extends State<ProfilePage> {
                   controller: enrollment,
                   decoration: const InputDecoration(
                     prefixIcon: Icon(Icons.badge_outlined, color: navy),
-                    hintText: 'e.g. D/3421/2017',
+                    hintText: 'e.g. D/1234/2018',
+                  ),
+                ),
+                const SizedBox(height: 14),
+                Text('State Bar Council', style: _fieldTitleStyle()),
+                const SizedBox(height: 6),
+                TextFormField(
+                  controller: stateBar,
+                  decoration: const InputDecoration(
+                    prefixIcon: Icon(Icons.account_balance_rounded, color: navy),
+                    hintText: 'e.g. Bar Council of Delhi',
                   ),
                 ),
                 const SizedBox(height: 14),
                 Text('Primary Court', style: _fieldTitleStyle()),
                 const SizedBox(height: 6),
                 DropdownButtonFormField<String>(
-                  initialValue: courtIds.containsKey(court) ? court : (courtIds.keys.firstOrNull ?? court),
+                  initialValue: courtIds.containsKey(court)
+                      ? court
+                      : (courtIds.keys.firstOrNull ?? court),
                   decoration: const InputDecoration(
                     prefixIcon: Icon(Icons.account_balance_outlined, color: navy),
                   ),
                   items: [
                     for (final c in courtIds.keys)
-                      DropdownMenuItem(value: c, child: Text(c, overflow: TextOverflow.ellipsis)),
+                      DropdownMenuItem(
+                        value: c,
+                        child: Text(c, overflow: TextOverflow.ellipsis),
+                      ),
                   ],
                   onChanged: (val) {
                     if (val != null) {
@@ -241,6 +505,38 @@ class _ProfilePageState extends State<ProfilePage> {
                       setState(() => court = val);
                     }
                   },
+                ),
+                const SizedBox(height: 14),
+                Text('Experience (Years in Practice)', style: _fieldTitleStyle()),
+                const SizedBox(height: 6),
+                TextFormField(
+                  controller: experienceYears,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                    prefixIcon: Icon(Icons.work_history_outlined, color: navy),
+                    hintText: 'e.g. 7',
+                  ),
+                ),
+                const SizedBox(height: 14),
+                Text('Contact / Mobile Number', style: _fieldTitleStyle()),
+                const SizedBox(height: 6),
+                TextFormField(
+                  controller: phone,
+                  keyboardType: TextInputType.phone,
+                  decoration: const InputDecoration(
+                    prefixIcon: Icon(Icons.phone_outlined, color: navy),
+                    hintText: 'e.g. +91 98101 23456',
+                  ),
+                ),
+                const SizedBox(height: 14),
+                Text('Chamber / Office Address', style: _fieldTitleStyle()),
+                const SizedBox(height: 6),
+                TextFormField(
+                  controller: chamberAddress,
+                  decoration: const InputDecoration(
+                    prefixIcon: Icon(Icons.location_on_outlined, color: navy),
+                    hintText: 'e.g. Chamber 402, Lawyers Block, Saket District Court',
+                  ),
                 ),
                 const SizedBox(height: 14),
                 Text('Practice Areas', style: _fieldTitleStyle()),
@@ -267,7 +563,9 @@ class _ProfilePageState extends State<ProfilePage> {
                   style: FilledButton.styleFrom(
                     backgroundColor: navy,
                     padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
                   ),
                   onPressed: saving
                       ? null
@@ -277,7 +575,7 @@ class _ProfilePageState extends State<ProfilePage> {
                         },
                   icon: const Icon(Icons.check_circle_outline_rounded, size: 18),
                   label: Text(
-                    saving ? 'Saving…' : 'Save to Firebase',
+                    saving ? 'Saving…' : 'Save to Cloud Firestore',
                     style: const TextStyle(fontWeight: FontWeight.w700),
                   ),
                 ),
@@ -295,7 +593,10 @@ class _ProfilePageState extends State<ProfilePage> {
       builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
         title: Text(title, style: heading(17)),
-        content: Text(message, style: const TextStyle(fontSize: 13, height: 1.5, color: ink)),
+        content: Text(
+          message,
+          style: const TextStyle(fontSize: 13, height: 1.5, color: ink),
+        ),
         actions: [
           FilledButton(
             style: FilledButton.styleFrom(backgroundColor: navy),
@@ -315,10 +616,15 @@ class _ProfilePageState extends State<ProfilePage> {
 
   @override
   void dispose() {
+    widget.store.removeListener(_onStoreChanged);
     name.dispose();
     enrollment.dispose();
     practice.dispose();
     bio.dispose();
+    phone.dispose();
+    experienceYears.dispose();
+    stateBar.dispose();
+    chamberAddress.dispose();
     super.dispose();
   }
 
@@ -327,7 +633,9 @@ class _ProfilePageState extends State<ProfilePage> {
     final user = _currentUser;
     final isLoggedIn = user != null && !user.isAnonymous;
     final userEmail = user?.email ??
-        (user?.isAnonymous == true ? 'Guest Session' : 'local_advocate@vakilsetu.in');
+        (user?.isAnonymous == true
+            ? 'Guest Session'
+            : 'local_advocate@vakilsetu.in');
     final userUid = user?.uid ?? 'local_preview';
     final advocateName = name.text.isEmpty ? widget.store.name : name.text;
     final initials = advocateName
@@ -336,6 +644,19 @@ class _ProfilePageState extends State<ProfilePage> {
         .map((s) => s[0].toUpperCase())
         .take(2)
         .join();
+    final activeTheme = _avatarThemes[avatar % _avatarThemes.length];
+    final activeStateBar = stateBar.text.isNotEmpty
+        ? stateBar.text
+        : widget.store.stateBar;
+    final activeEnrollment = enrollment.text.isNotEmpty
+        ? enrollment.text
+        : widget.store.enrollment;
+    final activePhone = phone.text.isNotEmpty ? phone.text : widget.store.phone;
+    final activeChamber = chamberAddress.text.isNotEmpty
+        ? chamberAddress.text
+        : widget.store.chamberAddress;
+    final activeExp =
+        int.tryParse(experienceYears.text) ?? widget.store.experienceYears;
 
     return Scaffold(
       backgroundColor: const Color(0xFFF7FAFD),
@@ -351,7 +672,11 @@ class _ProfilePageState extends State<ProfilePage> {
                   if (widget.onBack != null) ...[
                     IconButton(
                       onPressed: widget.onBack,
-                      icon: const Icon(Icons.arrow_back_ios_new_rounded, color: navy, size: 20),
+                      icon: const Icon(
+                        Icons.arrow_back_ios_new_rounded,
+                        color: navy,
+                        size: 20,
+                      ),
                       tooltip: 'Back to Home',
                     ),
                     const SizedBox(width: 4),
@@ -374,16 +699,30 @@ class _ProfilePageState extends State<ProfilePage> {
                       style: OutlinedButton.styleFrom(
                         foregroundColor: navy,
                         side: const BorderSide(color: Color(0xFFB9D7F0)),
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 6,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(18),
+                        ),
                       ),
                       onPressed: _openLogin,
                       icon: const Icon(Icons.login_rounded, size: 15),
-                      label: const Text('Log In', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+                      label: const Text(
+                        'Log In',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
                     )
                   else
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 4,
+                      ),
                       decoration: BoxDecoration(
                         color: const Color(0xFFE3F2FD),
                         borderRadius: BorderRadius.circular(16),
@@ -391,9 +730,20 @@ class _ProfilePageState extends State<ProfilePage> {
                       child: const Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(Icons.verified_rounded, size: 14, color: Color(0xFF147BEA)),
+                          Icon(
+                            Icons.verified_rounded,
+                            size: 14,
+                            color: Color(0xFF147BEA),
+                          ),
                           SizedBox(width: 4),
-                          Text('Active', style: TextStyle(fontSize: 11, color: Color(0xFF147BEA), fontWeight: FontWeight.w700)),
+                          Text(
+                            'Active',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: Color(0xFF147BEA),
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
                         ],
                       ),
                     ),
@@ -418,21 +768,54 @@ class _ProfilePageState extends State<ProfilePage> {
                 ),
                 child: Row(
                   children: [
-                    Stack(
-                      alignment: Alignment.bottomRight,
-                      children: [
-                        Avatar(initials.isEmpty ? 'AK' : initials, size: 66),
-                        Container(
-                          width: 22,
-                          height: 22,
-                          decoration: BoxDecoration(
-                            color: navy,
-                            shape: BoxShape.circle,
-                            border: Border.all(color: Colors.white, width: 2),
+                    GestureDetector(
+                      onTap: _openAvatarCustomizer,
+                      child: Stack(
+                        alignment: Alignment.bottomRight,
+                        children: [
+                          Container(
+                            width: 66,
+                            height: 66,
+                            decoration: BoxDecoration(
+                              color: activeTheme.bgColor,
+                              shape: BoxShape.circle,
+                              boxShadow: [
+                                BoxShadow(
+                                  color: activeTheme.bgColor.withValues(
+                                    alpha: 0.25,
+                                  ),
+                                  blurRadius: 10,
+                                  offset: const Offset(0, 4),
+                                ),
+                              ],
+                            ),
+                            alignment: Alignment.center,
+                            child: Text(
+                              initials.isEmpty ? 'AK' : initials,
+                              style: TextStyle(
+                                fontFamily: 'Manrope',
+                                fontWeight: FontWeight.w800,
+                                fontSize: 22,
+                                color: activeTheme.textColor,
+                              ),
+                            ),
                           ),
-                          child: const Icon(Icons.camera_alt_rounded, size: 11, color: Colors.white),
-                        ),
-                      ],
+                          Container(
+                            width: 22,
+                            height: 22,
+                            decoration: BoxDecoration(
+                              color: navy,
+                              shape: BoxShape.circle,
+                              border: Border.all(color: Colors.white, width: 2),
+                            ),
+                            child: const Icon(
+                              Icons.camera_alt_rounded,
+                              size: 11,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                     const SizedBox(width: 14),
                     Expanded(
@@ -448,53 +831,51 @@ class _ProfilePageState extends State<ProfilePage> {
                                   overflow: TextOverflow.ellipsis,
                                 ),
                               ),
-                              const SizedBox(width: 6),
+                              const SizedBox(width: 4),
                               const Icon(
                                 Icons.verified_rounded,
+                                size: 16,
                                 color: Color(0xFF147BEA),
-                                size: 18,
                               ),
                             ],
                           ),
-                          const SizedBox(height: 4),
-                          Row(
-                            children: [
-                              const Icon(Icons.badge_outlined, size: 13, color: slateBlue),
-                              const SizedBox(width: 6),
-                              Text(
-                                enrollment.text.isEmpty ? widget.store.enrollment : enrollment.text,
-                                style: const TextStyle(fontSize: 12, color: slateBlue, fontWeight: FontWeight.w600),
-                              ),
-                            ],
+                          const SizedBox(height: 3),
+                          Text(
+                            court,
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: muted,
+                              fontWeight: FontWeight.w500,
+                            ),
+                            overflow: TextOverflow.ellipsis,
                           ),
                           const SizedBox(height: 2),
-                          Row(
-                            children: [
-                              const Icon(Icons.mail_outline_rounded, size: 13, color: muted),
-                              const SizedBox(width: 6),
-                              Expanded(
-                                child: Text(
-                                  userEmail,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(fontSize: 11, color: muted),
-                                ),
-                              ),
-                            ],
+                          Text(
+                            'Reg: $activeEnrollment',
+                            style: const TextStyle(
+                              fontSize: 11,
+                              color: slateBlue,
+                              fontWeight: FontWeight.w600,
+                            ),
                           ),
                         ],
                       ),
                     ),
                     IconButton(
+                      icon: const Icon(
+                        Icons.edit_outlined,
+                        color: navy,
+                        size: 20,
+                      ),
                       onPressed: _openEditPersonalInfo,
-                      icon: const Icon(Icons.edit_outlined, color: slateBlue, size: 20),
-                      tooltip: 'Edit Profile',
+                      tooltip: 'Edit Profile Information',
                     ),
                   ],
                 ),
               ),
               const SizedBox(height: 14),
 
-              // 3. HIGHLIGHT CARD IN APP PRIMARY COLOR (Navy Gradient)
+              // 3. BAR COUNCIL DIGITAL ID BADGE CARD
               Container(
                 padding: const EdgeInsets.all(18),
                 decoration: BoxDecoration(
@@ -522,14 +903,17 @@ class _ProfilePageState extends State<ProfilePage> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 3,
+                            ),
                             decoration: BoxDecoration(
                               color: Colors.white.withValues(alpha: 0.18),
                               borderRadius: BorderRadius.circular(6),
                             ),
-                            child: const Text(
-                              'BAR COUNCIL OF DELHI',
-                              style: TextStyle(
+                            child: Text(
+                              activeStateBar.toUpperCase(),
+                              style: const TextStyle(
                                 color: Color(0xFFE2F0FE),
                                 fontSize: 9,
                                 letterSpacing: 1.2,
@@ -539,7 +923,7 @@ class _ProfilePageState extends State<ProfilePage> {
                           ),
                           const SizedBox(height: 8),
                           Text(
-                            enrollment.text.isEmpty ? widget.store.enrollment : enrollment.text,
+                            activeEnrollment,
                             style: const TextStyle(
                               color: Colors.white,
                               fontSize: 22,
@@ -566,41 +950,47 @@ class _ProfilePageState extends State<ProfilePage> {
                       decoration: BoxDecoration(
                         color: Colors.white.withValues(alpha: 0.12),
                         borderRadius: BorderRadius.circular(15),
-                        border: Border.all(color: Colors.white.withValues(alpha: 0.2)),
+                        border: Border.all(
+                          color: Colors.white.withValues(alpha: 0.2),
+                        ),
                       ),
                       alignment: Alignment.center,
-                      child: const LegalIcon('verified', size: 32, color: Color(0xFFF5B942)),
+                      child: const LegalIcon(
+                        'verified',
+                        size: 32,
+                        color: Color(0xFFF5B942),
+                      ),
                     ),
                   ],
                 ),
               ),
               const SizedBox(height: 14),
 
-              // 4. THREE STAT METRICS CARDS
+              // 4. THREE STAT METRICS CARDS (100% Dynamic)
               Row(
                 children: [
                   _StatCard(
-                    icon: Icons.account_balance_outlined,
-                    color: const Color(0xFF147BEA),
-                    label: 'PRIMARY COURT',
-                    value: court.split(' ').take(2).join(' '),
-                    subtitle: 'Verified Bar',
-                  ),
-                  const SizedBox(width: 10),
-                  const _StatCard(
                     icon: Icons.work_history_outlined,
                     color: teal,
                     label: 'EXPERIENCE',
-                    value: '7+ Years',
+                    value: '$activeExp Years',
                     subtitle: 'Active Practice',
                   ),
                   const SizedBox(width: 10),
-                  const _StatCard(
+                  _StatCard(
+                    icon: Icons.account_balance_outlined,
+                    color: const Color(0xFF147BEA),
+                    label: 'COURTS',
+                    value: '${widget.store.joined.length} Channels',
+                    subtitle: 'Real-Time Sync',
+                  ),
+                  const SizedBox(width: 10),
+                  _StatCard(
                     icon: Icons.groups_outlined,
                     color: bronze,
-                    label: 'CHANNELS',
-                    value: '6 Joined',
-                    subtitle: 'Real-Time Sync',
+                    label: 'GROUPS',
+                    value: '${widget.store.joinedGroupIds.length} Joined',
+                    subtitle: 'Chambers & Teams',
                   ),
                 ],
               ),
@@ -621,20 +1011,27 @@ class _ProfilePageState extends State<ProfilePage> {
                     icon: Icons.badge_outlined,
                     iconColor: teal,
                     title: 'Bar Council Credentials',
-                    subtitle: enrollment.text.isEmpty ? widget.store.enrollment : enrollment.text,
+                    subtitle: '$activeEnrollment · $activeStateBar',
                     onTap: () => _showInfoDialog(
                       'Bar Council Credentials',
-                      'Registration Number: ${enrollment.text}\nState Bar: Bar Council of Delhi\nVerification Status: Verified Advocate\nDigitally signed via Cloud Firestore.',
+                      'Registration Number: $activeEnrollment\nState Bar: $activeStateBar\nPrimary Court: $court\nExperience: $activeExp Years\nVerification Status: Verified Advocate\nDigitally signed via Cloud Firestore.',
                     ),
+                  ),
+                  _ProfileRow(
+                    icon: Icons.phone_outlined,
+                    iconColor: const Color(0xFF059669),
+                    title: 'Contact & Phone',
+                    subtitle: activePhone,
+                    onTap: _openEditPersonalInfo,
                   ),
                   _ProfileRow(
                     icon: Icons.location_on_outlined,
                     iconColor: const Color(0xFFE65100),
                     title: 'Court & Chamber Address',
-                    subtitle: '$court, Chambers Block',
+                    subtitle: activeChamber,
                     onTap: () => _showInfoDialog(
                       'Court & Chambers',
-                      'Primary Court: $court\nChambers: Block C, Lawyers Chambers, New Delhi\nCourt Channel ID: ${courtIds[court] ?? "delhi_high_court"}',
+                      'Primary Court: $court\nChambers: $activeChamber\nCourt Channel ID: ${courtIds[court] ?? "saket_district_court"}',
                     ),
                   ),
                 ],
@@ -672,7 +1069,8 @@ class _ProfilePageState extends State<ProfilePage> {
                     icon: Icons.cloud_done_outlined,
                     iconColor: teal,
                     title: 'Firebase Account Status',
-                    subtitle: '$userEmail (UID: ${userUid.substring(0, userUid.length > 12 ? 12 : userUid.length)}…)',
+                    subtitle:
+                        '$userEmail (UID: ${userUid.substring(0, userUid.length > 12 ? 12 : userUid.length)}…)',
                     onTap: () => _showInfoDialog(
                       'Firebase Session',
                       'Connected to Firebase Cloud Firestore.\nEmail: $userEmail\nUID: $userUid\nSecurity: Real-time rules enforced.',
@@ -723,6 +1121,13 @@ class _ProfilePageState extends State<ProfilePage> {
                     ),
                   ),
                   _ProfileRow(
+                    icon: Icons.palette_outlined,
+                    iconColor: bronze,
+                    title: 'Avatar Theme Preset',
+                    subtitle: activeTheme.name,
+                    onTap: _openAvatarCustomizer,
+                  ),
+                  _ProfileRow(
                     icon: Icons.language_rounded,
                     iconColor: teal,
                     title: 'Language',
@@ -759,7 +1164,7 @@ class _ProfilePageState extends State<ProfilePage> {
                 ],
               ),
 
-              // 10. LOG OUT BUTTON (Matching the reference screenshot)
+              // 10. LOG OUT BUTTON
               Container(
                 width: double.infinity,
                 margin: const EdgeInsets.only(top: 24, bottom: 16),
@@ -775,7 +1180,11 @@ class _ProfilePageState extends State<ProfilePage> {
                     elevation: 0,
                   ),
                   onPressed: _handleSignOut,
-                  icon: const Icon(Icons.logout_rounded, color: Color(0xFFE53935), size: 20),
+                  icon: const Icon(
+                    Icons.logout_rounded,
+                    color: Color(0xFFE53935),
+                    size: 20,
+                  ),
                   label: const Text(
                     'Log Out',
                     style: TextStyle(

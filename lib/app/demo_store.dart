@@ -285,6 +285,12 @@ class DemoStore extends ChangeNotifier {
   ];
   final joined = {courts[0], courts[1]};
   String name = 'Arjun Khanna', enrollment = 'D/1234/2018', court = courts[1];
+  String phone = '+91 98101 23456';
+  int experienceYears = 7;
+  String stateBar = 'Bar Council of Delhi';
+  String chamberAddress = 'Chamber 402, Lawyers Block, Saket District Court';
+  String practiceAreas = 'Civil litigation · Arbitration';
+  String bio = 'Practicing advocate registered with Bar Council of Delhi.';
   bool notifications = true, receipts = false, pending = false;
   int avatar = 0;
 
@@ -393,10 +399,28 @@ class DemoStore extends ChangeNotifier {
     notifyListeners();
   }
 
-  void updateProfile(String n, String e, String c) {
+  void updateProfile(
+    String n,
+    String e,
+    String c, {
+    String? phone,
+    int? experienceYears,
+    String? stateBar,
+    String? chamberAddress,
+    String? practiceAreas,
+    String? bio,
+    int? avatar,
+  }) {
     name = n;
     enrollment = e;
     court = c;
+    if (phone != null) this.phone = phone;
+    if (experienceYears != null) this.experienceYears = experienceYears;
+    if (stateBar != null) this.stateBar = stateBar;
+    if (chamberAddress != null) this.chamberAddress = chamberAddress;
+    if (practiceAreas != null) this.practiceAreas = practiceAreas;
+    if (bio != null) this.bio = bio;
+    if (avatar != null) this.avatar = avatar;
     pending = true;
     notifyListeners();
   }
