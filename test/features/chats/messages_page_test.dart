@@ -169,5 +169,84 @@ void main() {
       expect(find.text('1'), findsNothing);
       expect(meeraRoom.unread, equals(0));
     });
+
+    testWidgets('Image message does not render PDF badge and renders photo representation', (tester) async {
+      tester.view.physicalSize = const Size(400, 800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      final store = DemoStore();
+      final room = DemoRoom('room_img', 'Advocate Sharma', 'Civil', 'AS');
+      room.messages.add(
+        DemoMessage(
+          'Here is the evidence photo',
+          file: 'IMG_20260813_150136.jpg',
+          attachmentBytes: 30720,
+          mine: false,
+          createdAt: DateTime.now(),
+        ),
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: MessagesPage(
+              store: store,
+              initialRoom: room,
+            ),
+          ),
+        ),
+      );
+
+      await tester.pumpAndSettle();
+
+      // Ensure the message text and filename are rendered
+      expect(find.text('IMG_20260813_150136.jpg'), findsOneWidget);
+      expect(find.text('Here is the evidence photo'), findsOneWidget);
+
+      // Crucially, it must NOT show the generic "PDF" badge that was incorrectly shown before!
+      expect(find.text('PDF'), findsNothing);
+      // It should display 'Photo' detail
+      expect(find.textContaining('Photo'), findsOneWidget);
+    });
+
+    testWidgets('Tapping attach button displays modal bottom sheet with Gallery & Photo and Document / PDF options', (tester) async {
+      tester.view.physicalSize = const Size(400, 800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      final store = DemoStore();
+      final room = DemoRoom('room_attach', 'Advocate Kabir', 'Criminal', 'AK');
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: MessagesPage(
+              store: store,
+              initialRoom: room,
+            ),
+          ),
+        ),
+      );
+
+      await tester.pumpAndSettle();
+
+      // Tap the attachment paperclip icon
+      final attachBtn = find.byTooltip('Attach a document or file');
+      expect(attachBtn, findsOneWidget);
+      await tester.tap(attachBtn);
+      await tester.pumpAndSettle();
+
+      // Modal bottom sheet should now be shown
+      expect(find.text('Share in conversation'), findsOneWidget);
+      expect(find.text('Gallery & Photo'), findsOneWidget);
+      expect(find.text('Document / PDF'), findsOneWidget);
+    });
   });
 }

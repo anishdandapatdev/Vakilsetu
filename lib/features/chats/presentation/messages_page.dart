@@ -48,6 +48,10 @@ class _MessagesPageState extends State<MessagesPage> {
   String? nextHistoryCursor;
   String? pendingId, pendingBody, pendingRoom, pendingReply;
   DemoMessage? replyingTo, editingMessage;
+  PlatformFile? pendingAttachment;
+  Uint8List? pendingAttachmentBytes;
+  static final Map<String, Uint8List> _attachmentBytesCache = {};
+
   bool get serverRoom =>
       widget.repository is ServerMessaging &&
       active != null;
@@ -347,61 +351,109 @@ class _MessagesPageState extends State<MessagesPage> {
         '${hex.substring(12, 16)}-${hex.substring(16, 20)}-${hex.substring(20)}';
   }
 
-  Future<void> _pickAndSendAttachment() async {
+  void _showAttachmentPicker() {
     if (active == null || sending) return;
-    final picked = await FilePicker.platform.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: const ['pdf', 'jpg', 'jpeg', 'png', 'doc', 'docx'],
-      withData: true,
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 38,
+                  height: 4,
+                  margin: const EdgeInsets.only(bottom: 16),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade300,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const Text(
+                'Share in conversation',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w800,
+                  color: navy,
+                ),
+              ),
+              const SizedBox(height: 18),
+              Row(
+                children: [
+                  Expanded(
+                    child: _AttachmentOption(
+                      icon: Icons.image_rounded,
+                      label: 'Gallery & Photo',
+                      color: const Color(0xFF00A884),
+                      onTap: () {
+                        Navigator.pop(ctx);
+                        _pickAttachment(
+                          FileType.custom,
+                          allowedExtensions: ['jpg', 'jpeg', 'png', 'webp', 'gif'],
+                        );
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: _AttachmentOption(
+                      icon: Icons.picture_as_pdf_rounded,
+                      label: 'Document / PDF',
+                      color: const Color(0xFF5367FF),
+                      onTap: () {
+                        Navigator.pop(ctx);
+                        _pickAttachment(
+                          FileType.custom,
+                          allowedExtensions: ['pdf', 'doc', 'docx', 'txt'],
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+            ],
+          ),
+        ),
+      ),
     );
-    final file = picked?.files.single;
-    if (file == null) return;
-    if (file.bytes == null) {
-      if (mounted) toast(context, 'Could not read the selected file.');
-      return;
-    }
-    if (file.size > 25 * 1024 * 1024) {
-      if (mounted) toast(context, 'Attachments must be 25 MB or smaller.');
-      return;
-    }
-    final contentType = switch (file.extension?.toLowerCase()) {
-      'pdf' => 'application/pdf',
-      'jpg' || 'jpeg' => 'image/jpeg',
-      'png' => 'image/png',
-      'doc' => 'application/msword',
-      'docx' =>
-          'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-      _ => 'application/octet-stream',
-    };
-    final room = active!;
-    if (serverRoom) {
-      setState(() => sending = true);
-      try {
-        final messaging = widget.repository! as ServerMessaging;
-        final attachmentId = await messaging.uploadAttachment(
-          room.id,
-          file.name,
-          contentType,
-          file.bytes!,
-        );
-        await messaging.sendText(
-          room.id,
-          _newClientMessageId(),
-          composer.text.trim(),
-          attachmentId: attachmentId,
-          replyToMessageId: replyingTo?.id,
-        );
-        if (!mounted) return;
-        composer.clear();
-        setState(() => replyingTo = null);
-        await _refreshHistory();
-      } on Object catch (error) {
-        if (mounted) toast(context, 'Could not send attachment: $error');
-      } finally {
-        if (mounted) setState(() => sending = false);
+  }
+
+  Future<void> _pickAttachment(
+    FileType type, {
+    List<String>? allowedExtensions,
+  }) async {
+    if (active == null || sending) return;
+    try {
+      final picked = await FilePicker.platform.pickFiles(
+        type: type,
+        allowedExtensions: allowedExtensions,
+        withData: true,
+      );
+      final file = picked?.files.single;
+      if (file == null) return;
+      if (file.bytes == null) {
+        if (mounted) toast(context, 'Could not read the selected file.');
+        return;
       }
-    } else {
-      send(file: file.name);
+      if (file.size > 25 * 1024 * 1024) {
+        if (mounted) toast(context, 'Attachments must be 25 MB or smaller.');
+        return;
+      }
+      setState(() {
+        pendingAttachment = file;
+        pendingAttachmentBytes = file.bytes;
+      });
+    } catch (e) {
+      if (mounted) toast(context, 'Could not select file: $e');
     }
   }
 
@@ -424,60 +476,89 @@ class _MessagesPageState extends State<MessagesPage> {
 
   Future<void> send({String? file}) async {
     if (active == null) return;
-    if (widget.repository != null) {
-      if (!serverRoom || file != null) {
-        toast(
-          context,
-          'Open a server conversation to send text. File sending is not connected yet.',
-        );
-        return;
-      }
-      final body = composer.text.trim();
-      if (body.isEmpty || sending) return;
-      if (body.length > 4000) {
-        toast(context, 'Keep messages under 4,000 characters.');
-        return;
-      }
-      final room = active!;
-      if (editingMessage != null) {
-        setState(() => sending = true);
-        try {
+    final body = composer.text.trim();
+    if ((body.isEmpty && pendingAttachment == null && file == null) || sending) {
+      return;
+    }
+    if (body.length > 4000) {
+      toast(context, 'Keep messages under 4,000 characters.');
+      return;
+    }
+    final room = active!;
+    if (editingMessage != null) {
+      setState(() => sending = true);
+      try {
+        if (widget.repository is ServerMessaging) {
           await (widget.repository! as ServerMessaging).editMessage(
             room.id,
             editingMessage!.id!,
             body,
           );
-          if (!mounted) return;
-          composer.clear();
-          setState(() => editingMessage = null);
-          await _refreshHistory();
-        } on Object catch (error) {
-          if (mounted) toast(context, 'Could not edit message: $error');
-        } finally {
-          if (mounted) setState(() => sending = false);
         }
-        return;
+        if (!mounted) return;
+        composer.clear();
+        setState(() => editingMessage = null);
+        await _refreshHistory();
+      } on Object catch (error) {
+        if (mounted) toast(context, 'Could not edit message: $error');
+      } finally {
+        if (mounted) setState(() => sending = false);
       }
-      if (pendingBody != body ||
-          pendingRoom != room.id ||
-          pendingReply != replyingTo?.id) {
-        pendingId = _newClientMessageId();
-        pendingBody = body;
-        pendingRoom = room.id;
-        pendingReply = replyingTo?.id;
-      }
+      return;
+    }
+
+    if (widget.repository is ServerMessaging) {
       setState(() => sending = true);
       try {
+        String? attachmentId;
+        if (pendingAttachment != null && pendingAttachmentBytes != null) {
+          final ext = pendingAttachment!.extension?.toLowerCase();
+          final contentType = switch (ext) {
+            'pdf' => 'application/pdf',
+            'jpg' || 'jpeg' => 'image/jpeg',
+            'png' => 'image/png',
+            'webp' => 'image/webp',
+            'gif' => 'image/gif',
+            'doc' => 'application/msword',
+            'docx' =>
+                'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            _ => 'application/octet-stream',
+          };
+          attachmentId = await (widget.repository! as ServerMessaging)
+              .uploadAttachment(
+            room.id,
+            pendingAttachment!.name,
+            contentType,
+            pendingAttachmentBytes!,
+          );
+          _attachmentBytesCache[attachmentId] = pendingAttachmentBytes!;
+        }
+
+        if (pendingBody != body ||
+            pendingRoom != room.id ||
+            pendingReply != replyingTo?.id) {
+          pendingId = _newClientMessageId();
+          pendingBody = body;
+          pendingRoom = room.id;
+          pendingReply = replyingTo?.id;
+        }
+
         await (widget.repository! as ServerMessaging).sendText(
           room.id,
           pendingId!,
           body,
+          attachmentId: attachmentId,
           replyToMessageId: replyingTo?.id,
         );
+
         if (!mounted) return;
-        if (active == room && composer.text.trim() == body) composer.clear();
+        composer.clear();
+        setState(() {
+          pendingAttachment = null;
+          pendingAttachmentBytes = null;
+          replyingTo = null;
+        });
         pendingId = pendingBody = pendingRoom = pendingReply = null;
-        setState(() => replyingTo = null);
         await _refreshHistory();
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (scroll.hasClients) {
@@ -489,22 +570,33 @@ class _MessagesPageState extends State<MessagesPage> {
           }
         });
       } catch (_) {
-        if (mounted)
+        if (mounted) {
           toast(context, 'Message not confirmed. Tap send to retry.');
+        }
       } finally {
         if (mounted) setState(() => sending = false);
       }
       return;
     }
-    widget.store.send(active!, composer.text, file: file);
+
+    widget.store.send(
+      active!,
+      composer.text,
+      file: pendingAttachment?.name ?? file,
+    );
     composer.clear();
+    setState(() {
+      pendingAttachment = null;
+      pendingAttachmentBytes = null;
+    });
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (scroll.hasClients)
+      if (scroll.hasClients) {
         scroll.animateTo(
           scroll.position.maxScrollExtent,
           duration: const Duration(milliseconds: 180),
           curve: Curves.easeOut,
         );
+      }
     });
   }
 
@@ -1143,40 +1235,73 @@ class _MessagesPageState extends State<MessagesPage> {
                                                                 ],
                                                               ),
                                                             ),
-                                                          if (m.text.isNotEmpty)
-                                                            Text(
-                                                              m.text,
-                                                              style:
-                                                                  const TextStyle(
-                                                                    color: navy,
-                                                                    fontSize:
-                                                                        14,
-                                                                    height:
-                                                                        1.35,
+                                                          () {
+                                                            final isImage = m.file != null &&
+                                                                ((m.attachmentContentType?.startsWith('image/') ?? false) ||
+                                                                    RegExp(r'\.(jpe?g|png|webp|gif|bmp)$', caseSensitive: false)
+                                                                        .hasMatch(m.file!));
+                                                            if (isImage) {
+                                                              return Column(
+                                                                crossAxisAlignment: m.mine
+                                                                    ? CrossAxisAlignment.end
+                                                                    : CrossAxisAlignment.start,
+                                                                children: [
+                                                                  _ChatImageBubble(
+                                                                    filename: m.file!,
+                                                                    attachmentId: m.attachmentId,
+                                                                    attachmentBytes: m.attachmentBytes,
+                                                                    repository: widget.repository is ServerMessaging
+                                                                        ? widget.repository! as ServerMessaging
+                                                                        : null,
+                                                                    mine: m.mine,
+                                                                    onDownload: m.attachmentId == null
+                                                                        ? null
+                                                                        : () => _downloadAttachment(m),
                                                                   ),
-                                                            ),
-                                                          if (m.file !=
-                                                              null) ...[
-                                                            const SizedBox(
-                                                              height: 8,
-                                                            ),
-                                                            _ChatDocument(
-                                                              name: m.file!,
-                                                              detail:
-                                                                  m.attachmentBytes ==
-                                                                      null
-                                                                  ? 'Sample attachment · Preview'
-                                                                  : '${(m.attachmentBytes! / 1024).ceil()} KB',
-                                                              onOpen:
-                                                                  m.attachmentId ==
-                                                                      null
-                                                                  ? null
-                                                                  : () =>
-                                                                        _downloadAttachment(
-                                                                          m,
-                                                                        ),
-                                                            ),
-                                                          ],
+                                                                  if (m.text.isNotEmpty) ...[
+                                                                    const SizedBox(height: 6),
+                                                                    Text(
+                                                                      m.text,
+                                                                      style: const TextStyle(
+                                                                        color: navy,
+                                                                        fontSize: 14,
+                                                                        height: 1.35,
+                                                                      ),
+                                                                    ),
+                                                                  ],
+                                                                ],
+                                                              );
+                                                            }
+                                                            return Column(
+                                                              crossAxisAlignment: m.mine
+                                                                  ? CrossAxisAlignment.end
+                                                                  : CrossAxisAlignment.start,
+                                                              children: [
+                                                                if (m.text.isNotEmpty)
+                                                                  Text(
+                                                                    m.text,
+                                                                    style: const TextStyle(
+                                                                      color: navy,
+                                                                      fontSize: 14,
+                                                                      height: 1.35,
+                                                                    ),
+                                                                  ),
+                                                                if (m.file != null) ...[
+                                                                  if (m.text.isNotEmpty)
+                                                                    const SizedBox(height: 8),
+                                                                  _ChatDocument(
+                                                                    name: m.file!,
+                                                                    detail: m.attachmentBytes == null
+                                                                        ? 'Attachment · Ready'
+                                                                        : '${(m.attachmentBytes! / 1024).ceil()} KB',
+                                                                    onOpen: m.attachmentId == null
+                                                                        ? null
+                                                                        : () => _downloadAttachment(m),
+                                                                  ),
+                                                                ],
+                                                              ],
+                                                            );
+                                                          }(),
                                                         ],
                                                         const SizedBox(
                                                           height: 4,
@@ -1355,12 +1480,103 @@ class _MessagesPageState extends State<MessagesPage> {
                             ],
                           ),
                         ),
+                      if (pendingAttachment != null)
+                        Container(
+                          margin: const EdgeInsets.only(bottom: 8),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 8,
+                          ),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF1F8FC),
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(color: const Color(0xFFC7E3F7)),
+                          ),
+                          child: Row(
+                            children: [
+                              if (pendingAttachmentBytes != null &&
+                                  RegExp(r'\.(jpe?g|png|webp|gif|bmp)$', caseSensitive: false)
+                                      .hasMatch(pendingAttachment!.name))
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(8),
+                                  child: Image.memory(
+                                    pendingAttachmentBytes!,
+                                    width: 44,
+                                    height: 44,
+                                    fit: BoxFit.cover,
+                                  ),
+                                )
+                              else
+                                Container(
+                                  width: 40,
+                                  height: 40,
+                                  alignment: Alignment.center,
+                                  decoration: BoxDecoration(
+                                    color: pendingAttachment!.name.toLowerCase().endsWith('.pdf')
+                                        ? const Color(0xFFFF4D55)
+                                        : const Color(0xFF0870E4),
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: Text(
+                                    pendingAttachment!.name.toLowerCase().endsWith('.pdf')
+                                        ? 'PDF'
+                                        : 'DOC',
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.w800,
+                                      fontSize: 10,
+                                    ),
+                                  ),
+                                ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      pendingAttachment!.name,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(
+                                        color: navy,
+                                        fontSize: 12.5,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      '${(pendingAttachment!.size / 1024).ceil()} KB · Ready to send',
+                                      style: const TextStyle(
+                                        color: slateBlue,
+                                        fontSize: 10.5,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              IconButton(
+                                tooltip: 'Remove attachment',
+                                onPressed: () {
+                                  setState(() {
+                                    pendingAttachment = null;
+                                    pendingAttachmentBytes = null;
+                                  });
+                                },
+                                icon: const Icon(
+                                  Icons.close_rounded,
+                                  size: 18,
+                                  color: Color(0xFF6B7280),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
                       Row(
                         crossAxisAlignment: CrossAxisAlignment.end,
                         children: [
                           IconButton(
                             tooltip: 'Attach a document or file',
-                            onPressed: _pickAndSendAttachment,
+                            onPressed: _showAttachmentPicker,
                             icon: const Icon(
                               Icons.attach_file_rounded,
                               color: Color(0xFF0870E4),
@@ -1381,12 +1597,14 @@ class _MessagesPageState extends State<MessagesPage> {
                                 minLines: 1,
                                 maxLines: 4,
                                 keyboardType: TextInputType.multiline,
-                                decoration: const InputDecoration(
-                                  hintText: 'Write a message',
+                                decoration: InputDecoration(
+                                  hintText: pendingAttachment != null
+                                      ? 'Add a caption...'
+                                      : 'Write a message',
                                   border: InputBorder.none,
                                   enabledBorder: InputBorder.none,
                                   focusedBorder: InputBorder.none,
-                                  contentPadding: EdgeInsets.symmetric(
+                                  contentPadding: const EdgeInsets.symmetric(
                                     horizontal: 14,
                                     vertical: 10,
                                   ),
@@ -1434,70 +1652,418 @@ class _ChatDocument extends StatelessWidget {
   final VoidCallback? onOpen;
   const _ChatDocument({required this.name, required this.detail, this.onOpen});
 
+  (String, Color) _badgeInfo(String fileName) {
+    final lower = fileName.toLowerCase();
+    if (lower.endsWith('.pdf')) return ('PDF', const Color(0xFFFF4D55));
+    if (lower.endsWith('.doc') || lower.endsWith('.docx')) {
+      return ('DOC', const Color(0xFF0870E4));
+    }
+    if (lower.endsWith('.xls') ||
+        lower.endsWith('.xlsx') ||
+        lower.endsWith('.csv')) {
+      return ('XLS', const Color(0xFF107C41));
+    }
+    if (lower.endsWith('.txt')) {
+      return ('TXT', const Color(0xFF5A6872));
+    }
+    return ('FILE', const Color(0xFF0D9488));
+  }
+
   @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.all(8),
-    decoration: BoxDecoration(
-      color: const Color(0xFFF8FCFF),
+  Widget build(BuildContext context) {
+    final (badgeText, badgeColor) = _badgeInfo(name);
+    return InkWell(
+      onTap: onOpen,
       borderRadius: BorderRadius.circular(12),
-      border: Border.all(color: const Color(0xFFE0EDF5)),
-    ),
-    child: Row(
-      children: [
-        Container(
-          width: 36,
-          height: 40,
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: const Color(0xFFFF4D55),
-            borderRadius: BorderRadius.circular(8),
+      child: Container(
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          color: const Color(0xFFF8FCFF),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: const Color(0xFFE0EDF5)),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 36,
+              height: 40,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: badgeColor,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                badgeText,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w800,
+                  fontSize: 10,
+                ),
+              ),
+            ),
+            const SizedBox(width: 9),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: heading(11),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(detail, style: TextStyle(color: slateBlue, fontSize: 9)),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            Container(
+              width: 32,
+              height: 32,
+              decoration: BoxDecoration(
+                color: paleBlue,
+                borderRadius: BorderRadius.circular(11),
+              ),
+              child: Icon(
+                onOpen == null
+                    ? Icons.open_in_full_rounded
+                    : Icons.download_rounded,
+                color: const Color(0xFF0870E4),
+                size: 17,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ChatImageBubble extends StatefulWidget {
+  final String filename;
+  final String? attachmentId;
+  final int? attachmentBytes;
+  final ServerMessaging? repository;
+  final bool mine;
+  final VoidCallback? onDownload;
+
+  const _ChatImageBubble({
+    required this.filename,
+    this.attachmentId,
+    this.attachmentBytes,
+    this.repository,
+    this.mine = false,
+    this.onDownload,
+  });
+
+  @override
+  State<_ChatImageBubble> createState() => _ChatImageBubbleState();
+}
+
+class _ChatImageBubbleState extends State<_ChatImageBubble> {
+  Uint8List? _bytes;
+  bool _loading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadBytes();
+  }
+
+  @override
+  void didUpdateWidget(covariant _ChatImageBubble oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.attachmentId != widget.attachmentId) {
+      _loadBytes();
+    }
+  }
+
+  void _loadBytes() {
+    if (widget.attachmentId != null &&
+        _MessagesPageState._attachmentBytesCache.containsKey(widget.attachmentId)) {
+      _bytes = _MessagesPageState._attachmentBytesCache[widget.attachmentId];
+      _loading = false;
+      return;
+    }
+
+    if (widget.attachmentId != null && widget.repository != null) {
+      _loading = true;
+      widget.repository!.downloadAttachment(widget.attachmentId!).then((bytes) {
+        if (!mounted) return;
+        final uint8 = Uint8List.fromList(bytes);
+        _MessagesPageState._attachmentBytesCache[widget.attachmentId!] = uint8;
+        setState(() {
+          _bytes = uint8;
+          _loading = false;
+        });
+      }).catchError((_) {
+        if (!mounted) return;
+        setState(() {
+          _loading = false;
+        });
+      });
+    }
+  }
+
+  void _openLightbox() {
+    if (_bytes == null) return;
+    showDialog(
+      context: context,
+      barrierColor: Colors.black.withValues(alpha: 0.92),
+      builder: (ctx) => Scaffold(
+        backgroundColor: Colors.transparent,
+        appBar: AppBar(
+          backgroundColor: Colors.black.withValues(alpha: 0.6),
+          elevation: 0,
+          leading: IconButton(
+            icon: const Icon(Icons.close_rounded, color: Colors.white),
+            onPressed: () => Navigator.pop(ctx),
           ),
-          child: const Text(
-            'PDF',
-            style: TextStyle(
+          title: Text(
+            widget.filename,
+            style: const TextStyle(
               color: Colors.white,
-              fontWeight: FontWeight.w800,
-              fontSize: 10,
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          actions: [
+            if (widget.onDownload != null)
+              IconButton(
+                tooltip: 'Download image',
+                icon: const Icon(Icons.download_rounded, color: Colors.white),
+                onPressed: () {
+                  Navigator.pop(ctx);
+                  widget.onDownload?.call();
+                },
+              ),
+          ],
+        ),
+        body: Center(
+          child: InteractiveViewer(
+            panEnabled: true,
+            minScale: 0.8,
+            maxScale: 4.0,
+            child: Image.memory(
+              _bytes!,
+              fit: BoxFit.contain,
             ),
           ),
         ),
-        const SizedBox(width: 9),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                name,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: heading(11),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    const maxWidth = 260.0;
+    const maxHeight = 260.0;
+
+    if (_loading) {
+      return Container(
+        width: maxWidth,
+        height: 180,
+        decoration: BoxDecoration(
+          color: const Color(0xFFEAF4FB),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: const Color(0xFFD0E6F5)),
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const SizedBox(
+              width: 28,
+              height: 28,
+              child: CircularProgressIndicator(strokeWidth: 2.5, color: teal),
+            ),
+            const SizedBox(height: 10),
+            Text(
+              'Loading image...',
+              style: TextStyle(color: slateBlue, fontSize: 12),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (_bytes != null) {
+      return GestureDetector(
+        onTap: _openLightbox,
+        child: Container(
+          constraints: const BoxConstraints(
+            maxWidth: maxWidth,
+            maxHeight: maxHeight,
+          ),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: widget.mine
+                  ? const Color(0xFFBCE3DA)
+                  : const Color(0xFFD6E8F5),
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.06),
+                blurRadius: 6,
+                offset: const Offset(0, 2),
               ),
-              const SizedBox(height: 3),
-              Text(detail, style: TextStyle(color: slateBlue, fontSize: 9)),
             ],
           ),
-        ),
-        const SizedBox(width: 8),
-        InkWell(
-          onTap: onOpen,
-          borderRadius: BorderRadius.circular(11),
-          child: Container(
-            width: 32,
-            height: 32,
-            decoration: BoxDecoration(
-              color: paleBlue,
-              borderRadius: BorderRadius.circular(11),
-            ),
-            child: Icon(
-              onOpen == null
-                  ? Icons.open_in_full_rounded
-                  : Icons.download_rounded,
-              color: const Color(0xFF0870E4),
-              size: 17,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(13),
+            child: Stack(
+              children: [
+                Image.memory(
+                  _bytes!,
+                  fit: BoxFit.cover,
+                  width: double.infinity,
+                  frameBuilder: (context, child, frame, wasSynchronouslyLoaded) =>
+                      child,
+                ),
+                Positioned(
+                  top: 8,
+                  right: 8,
+                  child: Container(
+                    padding: const EdgeInsets.all(5),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.45),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.fullscreen_rounded,
+                      color: Colors.white,
+                      size: 16,
+                    ),
+                  ),
+                ),
+                if (widget.onDownload != null)
+                  Positioned(
+                    bottom: 8,
+                    right: 8,
+                    child: GestureDetector(
+                      onTap: widget.onDownload,
+                      child: Container(
+                        padding: const EdgeInsets.all(5),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withValues(alpha: 0.5),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.download_rounded,
+                          color: Colors.white,
+                          size: 16,
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
             ),
           ),
         ),
-      ],
-    ),
-  );
+      );
+    }
+
+    return Container(
+      width: maxWidth,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF3F8FC),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFD0E6F5)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              color: const Color(0xFF00A884).withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: const Icon(
+              Icons.image_outlined,
+              color: Color(0xFF00A884),
+              size: 24,
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  widget.filename,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: heading(11),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  widget.attachmentBytes != null
+                      ? '${(widget.attachmentBytes! / 1024).ceil()} KB · Photo'
+                      : 'Photo',
+                  style: TextStyle(color: slateBlue, fontSize: 9.5),
+                ),
+              ],
+            ),
+          ),
+          if (widget.onDownload != null)
+            IconButton(
+              icon: const Icon(Icons.download_rounded, color: teal, size: 20),
+              onPressed: widget.onDownload,
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AttachmentOption extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final Color color;
+  final VoidCallback onTap;
+
+  const _AttachmentOption({
+    required this.icon,
+    required this.label,
+    required this.color,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(16),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 58,
+              height: 58,
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.12),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(icon, color: color, size: 30),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              label,
+              style: const TextStyle(
+                fontSize: 12.5,
+                fontWeight: FontWeight.w600,
+                color: navy,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
