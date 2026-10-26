@@ -23,15 +23,41 @@ class FirestoreMessagingRepository
 
   final StreamController<void> _syncEvents = StreamController<void>.broadcast();
   StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _conversationsSub;
+  StreamSubscription<User?>? _authSub;
   final Map<String, StreamSubscription<QuerySnapshot<Map<String, dynamic>>>>
       _messageSubs = {};
   bool _seeded = false;
+
+  static const Map<String, String> _knownAdvocateNames = {
+    'adv_meera': 'Meera Sharma',
+    'meera': 'Meera Sharma',
+    'adv_kabir': 'Kabir Malhotra',
+    'kabir': 'Kabir Malhotra',
+    'adv_naina': 'Naina Bansal',
+    'naina': 'Naina Bansal',
+    'adv_rohit': 'Rohit Verma',
+    'rohit': 'Rohit Verma',
+  };
+
+  static String normalizeAdvocateId(String id) {
+    if (id.startsWith('adv_')) return id;
+    if (id == 'meera' || id == 'kabir' || id == 'naina' || id == 'rohit') {
+      return 'adv_$id';
+    }
+    return id;
+  }
 
   FirestoreMessagingRepository({
     FirebaseFirestore? firestore,
     FirebaseAuth? auth,
   })  : _firestore = firestore ?? FirebaseFirestore.instance,
-        _auth = auth ?? FirebaseAuth.instance;
+        _auth = auth ?? FirebaseAuth.instance {
+    _authSub = _auth.authStateChanges().listen((user) {
+      if (user != null) {
+        connectRealtime().catchError((_) {});
+      }
+    });
+  }
 
   String get _currentUserId {
     final user = _auth.currentUser;
@@ -123,9 +149,25 @@ class FirestoreMessagingRepository
         final lastMessageAt = (data['lastMessageAt'] as Timestamp?)?.toDate();
         final lastMessagePreview = data['lastMessagePreview'] as String?;
         final unread = (data['unreadCount'] as num?)?.toInt() ?? 0;
-        final title = (data['title'] as String?)?.isNotEmpty == true
+        final memberIds =
+            (data['memberIds'] as List<dynamic>?)?.cast<String>() ?? [];
+
+        String title = (data['title'] as String?)?.isNotEmpty == true
             ? data['title'] as String
             : (isGroup ? 'Private Group' : 'Advocate');
+
+        if (!isGroup) {
+          final peerId = memberIds.firstWhere((mId) => mId != uid, orElse: () => '');
+          final memberNames = data['memberNames'] as Map<String, dynamic>?;
+          if (memberNames != null &&
+              peerId.isNotEmpty &&
+              memberNames[peerId] is String &&
+              (memberNames[peerId] as String).isNotEmpty) {
+            title = memberNames[peerId] as String;
+          } else if (peerId.isNotEmpty && _knownAdvocateNames.containsKey(peerId)) {
+            title = _knownAdvocateNames[peerId]!;
+          }
+        }
 
         return ConversationSummary(
           id: doc.id,
@@ -163,13 +205,29 @@ class FirestoreMessagingRepository
         final memberIds =
             (data['memberIds'] as List<dynamic>?)?.cast<String>() ?? [];
         final isGroup = data['kind'] == 'privateGroup';
-        final title = data['title'] as String?;
         final epoch = (data['membershipEpoch'] as num?)?.toInt() ?? 1;
+        final memberNames = data['memberNames'] as Map<String, dynamic>?;
+
+        String? title = data['title'] as String?;
+        if (!isGroup && memberIds.isNotEmpty) {
+          final peerId = memberIds.firstWhere((mId) => mId != _currentUserId, orElse: () => '');
+          if (memberNames != null && peerId.isNotEmpty && memberNames[peerId] is String) {
+            title = memberNames[peerId] as String;
+          } else if (peerId.isNotEmpty && _knownAdvocateNames.containsKey(peerId)) {
+            title = _knownAdvocateNames[peerId];
+          }
+        }
 
         final members = memberIds.map((mId) {
+          String name = mId == _currentUserId ? _currentUserName : 'Advocate';
+          if (memberNames != null && memberNames[mId] is String) {
+            name = memberNames[mId] as String;
+          } else if (_knownAdvocateNames.containsKey(mId)) {
+            name = _knownAdvocateNames[mId]!;
+          }
           return ConversationMember(
             accountId: mId,
-            fullName: mId == _currentUserId ? _currentUserName : 'Advocate',
+            fullName: name,
             role: 'member',
             devices: const [],
           );
@@ -205,6 +263,8 @@ class FirestoreMessagingRepository
   @override
   Future<ConversationSummary> createDirect(String peerAccountId) async {
     final uid = _currentUserId;
+    final normPeerId = normalizeAdvocateId(peerAccountId);
+
     try {
       // 1. Check if direct conversation already exists between these users
       final existing = await _firestore
@@ -217,9 +277,18 @@ class FirestoreMessagingRepository
         if (data['kind'] == 'direct' || data['kind'] == null) {
           final members =
               (data['memberIds'] as List<dynamic>?)?.cast<String>() ?? [];
-          if (members.contains(peerAccountId)) {
-            final title =
-                data['title'] as String? ?? 'Private Conversation';
+          if (members.contains(peerAccountId) || members.contains(normPeerId)) {
+            final memberNames = data['memberNames'] as Map<String, dynamic>?;
+            String title = data['title'] as String? ?? 'Private Conversation';
+            if (memberNames != null && memberNames[normPeerId] is String) {
+              title = memberNames[normPeerId] as String;
+            } else if (_knownAdvocateNames.containsKey(peerAccountId)) {
+              title = _knownAdvocateNames[peerAccountId]!;
+            } else if (_knownAdvocateNames.containsKey(normPeerId)) {
+              title = _knownAdvocateNames[normPeerId]!;
+            }
+
+            _listenToConversationMessages(doc.id);
             return ConversationSummary(
               id: doc.id,
               kind: ConversationKind.direct,
@@ -236,18 +305,20 @@ class FirestoreMessagingRepository
         }
       }
 
-      // 2. Fetch peer advocate details for title
-      String peerTitle = 'Advocate';
+      // 2. Resolve peer advocate details for title
+      String peerTitle = _knownAdvocateNames[peerAccountId] ??
+          _knownAdvocateNames[normPeerId] ??
+          'Advocate';
       try {
         final advDoc =
-            await _firestore.collection('advocates').doc(peerAccountId).get();
+            await _firestore.collection('advocates').doc(normPeerId).get();
         if (advDoc.exists) {
-          peerTitle = advDoc.data()?['fullName'] as String? ?? 'Advocate';
+          peerTitle = advDoc.data()?['fullName'] as String? ?? peerTitle;
         } else {
           final userDoc =
               await _firestore.collection('users').doc(peerAccountId).get();
           if (userDoc.exists) {
-            peerTitle = userDoc.data()?['fullName'] as String? ?? 'Advocate';
+            peerTitle = userDoc.data()?['fullName'] as String? ?? peerTitle;
           }
         }
       } catch (_) {}
@@ -255,11 +326,17 @@ class FirestoreMessagingRepository
       // 3. Create new direct conversation document
       final id = _generateUuid();
       final now = FieldValue.serverTimestamp();
+      final allMemberIds = {uid, normPeerId, peerAccountId}.toList();
       final data = {
         'id': id,
         'kind': 'direct',
         'title': peerTitle,
-        'memberIds': [uid, peerAccountId],
+        'memberIds': allMemberIds,
+        'memberNames': {
+          uid: _currentUserName,
+          normPeerId: peerTitle,
+          if (peerAccountId != normPeerId) peerAccountId: peerTitle,
+        },
         'membershipEpoch': 1,
         'createdAt': now,
         'lastMessageAt': now,
@@ -269,6 +346,7 @@ class FirestoreMessagingRepository
       };
 
       await _firestore.collection('conversations').doc(id).set(data);
+      _listenToConversationMessages(id);
       _syncEvents.add(null);
 
       return ConversationSummary(
@@ -284,10 +362,13 @@ class FirestoreMessagingRepository
     } catch (e) {
       debugPrint('Firestore createDirect error: $e');
       final fallbackId = _generateUuid();
+      final fallbackTitle = _knownAdvocateNames[peerAccountId] ??
+          _knownAdvocateNames[normPeerId] ??
+          'Advocate';
       return ConversationSummary(
         id: fallbackId,
         kind: ConversationKind.direct,
-        title: 'Advocate',
+        title: fallbackTitle,
         membershipEpoch: 1,
         createdAt: DateTime.now(),
       );
@@ -318,6 +399,7 @@ class FirestoreMessagingRepository
     };
 
     await _firestore.collection('conversations').doc(id).set(data);
+    _listenToConversationMessages(id);
     _syncEvents.add(null);
 
     return ConversationSummary(
@@ -393,10 +475,19 @@ class FirestoreMessagingRepository
 
       final nextCursor =
           snapshot.docs.isNotEmpty ? snapshot.docs.last.id : null;
+
+      if (items.isEmpty && before == null) {
+        final fallbacks = _fallbackMessagesForConversation(conversationId, uid);
+        if (fallbacks.isNotEmpty) {
+          return ServerMessagePage(fallbacks, null);
+        }
+      }
+
       return ServerMessagePage(items, nextCursor);
     } catch (e) {
       debugPrint('Firestore history error: $e');
-      return ServerMessagePage(const [], null);
+      final fallbacks = _fallbackMessagesForConversation(conversationId, uid);
+      return ServerMessagePage(fallbacks, null);
     }
   }
 
@@ -474,13 +565,44 @@ class FirestoreMessagingRepository
         .doc(clientMessageId)
         .set(messageDoc);
 
-    await _firestore.collection('conversations').doc(conversationId).set({
-      'lastMessagePreview':
-          body.isNotEmpty ? body : (attachmentName ?? 'Attachment'),
-      'lastMessageAt': FieldValue.serverTimestamp(),
-      'lastSenderId': uid,
-    }, SetOptions(merge: true));
+    final convRef = _firestore.collection('conversations').doc(conversationId);
+    try {
+      final convDoc = await convRef.get();
+      if (!convDoc.exists) {
+        await convRef.set({
+          'id': conversationId,
+          'kind': 'direct',
+          'title': _knownAdvocateNames[conversationId] ?? 'Advocate',
+          'memberIds': [uid],
+          'membershipEpoch': 1,
+          'createdAt': FieldValue.serverTimestamp(),
+          'lastMessagePreview':
+              body.isNotEmpty ? body : (attachmentName ?? 'Attachment'),
+          'lastMessageAt': FieldValue.serverTimestamp(),
+          'lastSenderId': uid,
+          'unreadCount': 0,
+          'createdBy': uid,
+        });
+      } else {
+        await convRef.set({
+          'lastMessagePreview':
+              body.isNotEmpty ? body : (attachmentName ?? 'Attachment'),
+          'lastMessageAt': FieldValue.serverTimestamp(),
+          'lastSenderId': uid,
+          'memberIds': FieldValue.arrayUnion([uid]),
+        }, SetOptions(merge: true));
+      }
+    } catch (_) {
+      await convRef.set({
+        'lastMessagePreview':
+            body.isNotEmpty ? body : (attachmentName ?? 'Attachment'),
+        'lastMessageAt': FieldValue.serverTimestamp(),
+        'lastSenderId': uid,
+        'memberIds': FieldValue.arrayUnion([uid]),
+      }, SetOptions(merge: true));
+    }
 
+    _listenToConversationMessages(conversationId);
     _syncEvents.add(null);
   }
 
@@ -673,6 +795,7 @@ class FirestoreMessagingRepository
 
   @override
   Future<void> close() async {
+    await _authSub?.cancel();
     await _conversationsSub?.cancel();
     for (final sub in _messageSubs.values) {
       await sub.cancel();
@@ -695,7 +818,12 @@ class FirestoreMessagingRepository
         'id': meeraId,
         'kind': 'direct',
         'title': 'Meera Sharma',
-        'memberIds': [uid, 'adv_meera'],
+        'memberIds': FieldValue.arrayUnion([uid, 'adv_meera', 'meera']),
+        'memberNames': {
+          uid: _currentUserName,
+          'adv_meera': 'Meera Sharma',
+          'meera': 'Meera Sharma',
+        },
         'membershipEpoch': 1,
         'createdAt': Timestamp.fromDate(now.subtract(const Duration(hours: 3))),
         'lastMessageAt':
@@ -704,7 +832,7 @@ class FirestoreMessagingRepository
             'Let me know once you go through the clause 14 provisions.',
         'unreadCount': 1,
         'createdBy': 'adv_meera',
-      });
+      }, SetOptions(merge: true));
 
       await meeraDoc.collection('messages').doc('msg_meera_1').set({
         'id': 'msg_meera_1',
@@ -755,7 +883,12 @@ class FirestoreMessagingRepository
         'id': kabirId,
         'kind': 'direct',
         'title': 'Kabir Malhotra',
-        'memberIds': [uid, 'adv_kabir'],
+        'memberIds': FieldValue.arrayUnion([uid, 'adv_kabir', 'kabir']),
+        'memberNames': {
+          uid: _currentUserName,
+          'adv_kabir': 'Kabir Malhotra',
+          'kabir': 'Kabir Malhotra',
+        },
         'membershipEpoch': 1,
         'createdAt': Timestamp.fromDate(now.subtract(const Duration(days: 1))),
         'lastMessageAt':
@@ -764,7 +897,7 @@ class FirestoreMessagingRepository
             'Saket Court bench hearing is scheduled for tomorrow 10:30 AM.',
         'unreadCount': 0,
         'createdBy': 'adv_kabir',
-      });
+      }, SetOptions(merge: true));
 
       await kabirDoc.collection('messages').doc('msg_kabir_1').set({
         'id': 'msg_kabir_1',
@@ -800,7 +933,7 @@ class FirestoreMessagingRepository
         'id': groupId,
         'kind': 'privateGroup',
         'title': 'Delhi High Court Bar Association',
-        'memberIds': [uid, 'adv_meera', 'adv_kabir', 'adv_rohit'],
+        'memberIds': FieldValue.arrayUnion([uid, 'adv_meera', 'adv_kabir', 'adv_rohit']),
         'membershipEpoch': 1,
         'createdAt': Timestamp.fromDate(now.subtract(const Duration(days: 3))),
         'lastMessageAt':
@@ -809,7 +942,7 @@ class FirestoreMessagingRepository
             'The bar association meeting on digital filings is at 4 PM in library hall.',
         'unreadCount': 2,
         'createdBy': 'adv_meera',
-      });
+      }, SetOptions(merge: true));
 
       await groupDoc.collection('messages').doc('msg_grp_1').set({
         'id': 'msg_grp_1',
@@ -842,6 +975,176 @@ class FirestoreMessagingRepository
     } catch (e) {
       debugPrint('Firestore seed error: $e');
     }
+  }
+
+  static List<ServerMessage> _fallbackMessagesForConversation(
+    String conversationId,
+    String uid,
+  ) {
+    final now = DateTime.now();
+    final lowerId = conversationId.toLowerCase();
+
+    if (lowerId == '11111111-2222-3333-4444-555555555551' ||
+        lowerId.contains('meera')) {
+      return [
+        ServerMessage(
+          'msg_meera_1',
+          'Hello Counsel, have you reviewed the commercial arbitration draft for Delhi High Court?',
+          'Meera Sharma',
+          false,
+          now.subtract(const Duration(hours: 2)),
+          1,
+          1,
+          1,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          false,
+          null,
+          null,
+        ),
+        ServerMessage(
+          'msg_meera_2',
+          'Yes, I reviewed it. The jurisdiction clause looks solid.',
+          'Anish Kumar',
+          true,
+          now.subtract(const Duration(hours: 1)),
+          1,
+          1,
+          1,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          false,
+          null,
+          null,
+        ),
+        ServerMessage(
+          'msg_meera_3',
+          'Let me know once you go through the clause 14 provisions.',
+          'Meera Sharma',
+          false,
+          now.subtract(const Duration(minutes: 15)),
+          1,
+          1,
+          0,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          false,
+          null,
+          null,
+        ),
+      ];
+    }
+
+    if (lowerId == '11111111-2222-3333-4444-555555555552' ||
+        lowerId.contains('kabir')) {
+      return [
+        ServerMessage(
+          'msg_kabir_1',
+          'Are you appearing before Court 3 tomorrow?',
+          'Anish Kumar',
+          true,
+          now.subtract(const Duration(hours: 2)),
+          1,
+          1,
+          1,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          false,
+          null,
+          null,
+        ),
+        ServerMessage(
+          'msg_kabir_2',
+          'Saket Court bench hearing is scheduled for tomorrow 10:30 AM.',
+          'Kabir Malhotra',
+          false,
+          now.subtract(const Duration(minutes: 45)),
+          1,
+          1,
+          1,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          false,
+          null,
+          null,
+        ),
+      ];
+    }
+
+    if (lowerId == '11111111-2222-3333-4444-555555555553' ||
+        lowerId.contains('highcourt') ||
+        lowerId.contains('delhi') ||
+        lowerId.contains('bar')) {
+      return [
+        ServerMessage(
+          'msg_grp_1',
+          'Notice: The bar association meeting on digital filings is at 4 PM in library hall.',
+          'Meera Sharma',
+          false,
+          now.subtract(const Duration(hours: 3)),
+          4,
+          4,
+          2,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          false,
+          null,
+          null,
+        ),
+        ServerMessage(
+          'msg_grp_2',
+          'Agreed, we need to address the hybrid hearing slots as well.',
+          'Rohit Verma',
+          false,
+          now.subtract(const Duration(hours: 2)),
+          4,
+          4,
+          2,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          false,
+          null,
+          null,
+        ),
+      ];
+    }
+
+    return const [];
   }
 
   static final List<ConversationSummary> _fallbackConversations = [

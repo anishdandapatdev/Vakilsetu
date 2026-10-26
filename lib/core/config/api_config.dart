@@ -3,8 +3,8 @@ import 'package:flutter/foundation.dart';
 class ApiConfig {
   ApiConfig._();
 
-  /// Defaults to true so the app connects to the VakilSetu phone OTP backend.
-  static const enabled = bool.fromEnvironment('API_ENABLED', defaultValue: true);
+  /// Defaults to false so the app connects directly to the Firebase backend.
+  static const enabled = bool.fromEnvironment('API_ENABLED', defaultValue: false);
 
   /// Automatically resolves to 10.0.2.2 on Android Emulators and 127.0.0.1 on Desktop/Web.
   static String get baseUrl {

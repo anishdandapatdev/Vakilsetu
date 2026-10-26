@@ -54,3 +54,5 @@ app.*.map.json
 /backend/.env
 node_modules/
 dist/
+.kotlin/
+android/.kotlin/

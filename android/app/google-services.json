@@ -12,7 +12,20 @@
           "package_name": "com.vakilsetu"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "877065720354-q0jl8rj9hqa8il2ioh5ekjnn6i37gibn.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.vakilsetu",
+            "certificate_hash": "b0484ba179c03c81bf5c36be8ee97b0aff789fba"
+          }
+        },
+        {
+          "client_id": "877065720354-55sbi809jrkh3ldebfjq6ivo9v6ujok6.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyBTjEwxbBYopjYnz9jtEmc6sDmj8WUltD4"
@@ -20,7 +33,12 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "877065720354-55sbi809jrkh3ldebfjq6ivo9v6ujok6.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
         }
       }
     }

@@ -86,11 +86,11 @@ class _LoginPageState extends State<LoginPage> {
 
     await _runAction(() async {
       final phoneText = '+91${_phoneController.text.trim()}';
-      final apiRepo = _getApiRepo();
-      await apiRepo.signInWithPassword(phoneText, _passwordController.text.trim());
+      final repo = _repository ?? _getApiRepo();
+      await repo.signInWithPassword(phoneText, _passwordController.text.trim());
       if (!mounted) return;
       toast(context, 'Signed in successfully!');
-      _enterApp(apiRepo);
+      _enterApp(repo);
     });
   }
 

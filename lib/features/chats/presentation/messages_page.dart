@@ -49,9 +49,7 @@ class _MessagesPageState extends State<MessagesPage> {
   DemoMessage? replyingTo, editingMessage;
   bool get serverRoom =>
       widget.repository is ServerMessaging &&
-      active != null &&
-      (RegExp(r'^[0-9a-fA-F-]{36}$').hasMatch(active!.id) ||
-          !RegExp(r'^[1-5]$').hasMatch(active!.id));
+      active != null;
 
   Future<void> _refreshHistory({bool showLoading = false}) async {
     if (!serverRoom) return;
@@ -103,7 +101,11 @@ class _MessagesPageState extends State<MessagesPage> {
           ..clear()
           ..addAll(
             byId.values.toList()
-              ..sort((a, b) => a.createdAt!.compareTo(b.createdAt!)),
+              ..sort((a, b) {
+                final aTime = a.createdAt ?? DateTime.fromMillisecondsSinceEpoch(0);
+                final bTime = b.createdAt ?? DateTime.fromMillisecondsSinceEpoch(0);
+                return aTime.compareTo(bTime);
+              }),
           );
         if (!historyInitialized) nextHistoryCursor = page.nextCursor;
         historyInitialized = true;
@@ -246,7 +248,21 @@ class _MessagesPageState extends State<MessagesPage> {
           lastMessageAt: summary.lastMessageAt ?? summary.createdAt,
         );
       }).toList();
-      if (mounted) setState(() => apiRooms = mapped);
+      if (mounted) {
+        setState(() {
+          apiRooms = mapped;
+          if (active != null) {
+            final match = mapped.where((m) => m.id == active!.id);
+            if (match.isNotEmpty) {
+              final activeMessages = List<DemoMessage>.from(active!.messages);
+              active = match.first;
+              if (active!.messages.isEmpty && activeMessages.isNotEmpty) {
+                active!.messages.addAll(activeMessages);
+              }
+            }
+          }
+        });
+      }
     } on Object catch (error) {
       if (mounted) setState(() => apiError = error.toString());
     } finally {
@@ -424,6 +440,15 @@ class _MessagesPageState extends State<MessagesPage> {
         pendingId = pendingBody = pendingRoom = pendingReply = null;
         setState(() => replyingTo = null);
         await _refreshHistory();
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (scroll.hasClients) {
+            scroll.animateTo(
+              scroll.position.maxScrollExtent,
+              duration: const Duration(milliseconds: 180),
+              curve: Curves.easeOut,
+            );
+          }
+        });
       } catch (_) {
         if (mounted)
           toast(context, 'Message not confirmed. Tap send to retry.');
@@ -606,7 +631,7 @@ class _MessagesPageState extends State<MessagesPage> {
                       clipBehavior: Clip.antiAlias,
                       child: ConversationRow(
                         room: r,
-                        selected: active == r,
+                        selected: active?.id == r.id,
                         onTap: () {
                           widget.store.read(r);
                           _openRoom(r);

@@ -65,11 +65,87 @@ class FirebaseAuthRepository implements AuthRepository {
   @override
   Future<SessionIdentity> signInWithPassword(String phoneNumber, String password) async {
     final cleanPhone = phoneNumber.replaceAll(RegExp(r'\D'), '');
-    var user = _auth.currentUser;
+    final virtualEmail = '$cleanPhone@vakilsetu.in';
+    User? user = _auth.currentUser;
+
     if (user == null) {
-      final credential = await _auth.signInAnonymously();
-      user = credential.user;
+      try {
+        // 1. Try signing in with virtual email (phone@vakilsetu.in)
+        final credential = await _auth.signInWithEmailAndPassword(
+          email: virtualEmail,
+          password: password,
+        );
+        user = credential.user;
+      } on FirebaseAuthException catch (e) {
+        if (e.code == 'user-not-found' ||
+            e.code == 'invalid-credential' ||
+            e.code == 'invalid-login-credentials') {
+          // 2. User does not exist yet; try creating account with these credentials
+          try {
+            final credential = await _auth.createUserWithEmailAndPassword(
+              email: virtualEmail,
+              password: password,
+            );
+            user = credential.user;
+          } catch (createError) {
+            // 3. Fallback to anonymous sign in
+            try {
+              final credential = await _auth.signInAnonymously();
+              user = credential.user;
+            } catch (anonError) {
+              if (anonError.toString().contains('CONFIGURATION_NOT_FOUND')) {
+                throw Exception(
+                  'Firebase Authentication is not enabled yet in your Firebase Console. '
+                  'Please go to Firebase Console -> Build -> Authentication, click "Get started", '
+                  'and enable "Email/Password" and "Anonymous" in the Sign-in method tab.',
+                );
+              }
+              throw Exception(createError.toString());
+            }
+          }
+        } else if (e.message != null && e.message!.contains('CONFIGURATION_NOT_FOUND')) {
+          throw Exception(
+            'Firebase Authentication is not enabled yet in your Firebase Console. '
+            'Please go to Firebase Console -> Build -> Authentication, click "Get started", '
+            'and enable "Email/Password" and "Anonymous" in the Sign-in method tab.',
+          );
+        } else {
+          // Try anonymous fallback
+          try {
+            final credential = await _auth.signInAnonymously();
+            user = credential.user;
+          } catch (anonError) {
+            if (anonError.toString().contains('CONFIGURATION_NOT_FOUND')) {
+              throw Exception(
+                'Firebase Authentication is not enabled yet in your Firebase Console. '
+                'Please go to Firebase Console -> Build -> Authentication, click "Get started", '
+                'and enable "Email/Password" and "Anonymous" in the Sign-in method tab.',
+              );
+            }
+            throw Exception(e.message ?? 'Authentication failed');
+          }
+        }
+      } catch (err) {
+        if (err.toString().contains('CONFIGURATION_NOT_FOUND')) {
+          throw Exception(
+            'Firebase Authentication is not enabled yet in your Firebase Console. '
+            'Please go to Firebase Console -> Build -> Authentication, click "Get started", '
+            'and enable "Email/Password" and "Anonymous" in the Sign-in method tab.',
+          );
+        }
+        try {
+          final credential = await _auth.signInAnonymously();
+          user = credential.user;
+        } catch (_) {
+          rethrow;
+        }
+      }
     }
+
+    if (user != null) {
+      await _syncUserDoc(user);
+    }
+
     return SessionIdentity(
       userId: user?.uid ?? 'adv_$cleanPhone',
       deviceId: 'device_$cleanPhone',
