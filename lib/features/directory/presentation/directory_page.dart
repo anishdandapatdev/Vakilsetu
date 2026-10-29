@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../../../app/demo_store.dart';
@@ -173,7 +172,7 @@ class _DirectoryPageState extends State<DirectoryPage> {
   Widget build(BuildContext context) {
     const preserveDemoData = bool.fromEnvironment(
       'PRESERVE_DEMO_DATA',
-      defaultValue: !kReleaseMode,
+      defaultValue: false,
     );
     final serverItems = apiResults ?? const <DemoAdvocate>[];
     final source = _deduplicate([

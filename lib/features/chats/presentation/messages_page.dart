@@ -17,6 +17,7 @@ class MessagesPage extends StatefulWidget {
   final ValueChanged<bool>? onConversationChanged;
   final MessagingRepository? repository;
   final VoidCallback? onProfile;
+  final VoidCallback? onDirectory;
   const MessagesPage({
     super.key,
     required this.store,
@@ -24,6 +25,7 @@ class MessagesPage extends StatefulWidget {
     this.onConversationChanged,
     this.repository,
     this.onProfile,
+    this.onDirectory,
   });
   @override
   State<MessagesPage> createState() => _MessagesPageState();
@@ -748,11 +750,77 @@ class _MessagesPageState extends State<MessagesPage> {
                       ),
                       const SizedBox(height: 10),
                     ],
-                    if (rooms.isEmpty)
-                      const EmptyState(
-                        'Nothing here yet',
-                        'Try another filter or start a chat from the directory.',
+                    if (rooms.isEmpty) ...[
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 26),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(18),
+                          border: Border.all(color: line),
+                          boxShadow: const [
+                            BoxShadow(
+                              color: Color(0x080C6F91),
+                              blurRadius: 16,
+                              offset: Offset(0, 4),
+                            ),
+                          ],
+                        ),
+                        child: Column(
+                          children: [
+                            Container(
+                              width: 52,
+                              height: 52,
+                              decoration: const BoxDecoration(
+                                color: Color(0xFFEAF5FA),
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Icon(
+                                Icons.forum_outlined,
+                                color: Color(0xFF0C6F91),
+                                size: 26,
+                              ),
+                            ),
+                            const SizedBox(height: 14),
+                            const Text(
+                              'No Conversations Yet',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                color: navy,
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            const Text(
+                              'VakilSetu is an advocate-to-advocate network. Connect with colleagues from the directory for consultations and cause-list briefs.',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: muted,
+                                height: 1.4,
+                              ),
+                            ),
+                            if (widget.onDirectory != null) ...[
+                              const SizedBox(height: 16),
+                              FilledButton.icon(
+                                onPressed: widget.onDirectory,
+                                style: FilledButton.styleFrom(
+                                  backgroundColor: const Color(0xFF0C6F91),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 18,
+                                    vertical: 12,
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                ),
+                                icon: const Icon(Icons.people_outline, size: 18),
+                                label: const Text('Browse Advocate Directory'),
+                              ),
+                            ],
+                          ],
+                        ),
                       ),
+                    ],
                     for (final r in rooms)
                       Container(
                         margin: const EdgeInsets.only(bottom: 10),

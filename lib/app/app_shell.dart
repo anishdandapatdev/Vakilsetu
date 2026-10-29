@@ -200,6 +200,7 @@ class _AppShellState extends State<AppShell> {
           repository: messagingRepository,
           initialRoom: activeRoom,
           onProfile: () => go(6),
+          onDirectory: () => go(2),
           onConversationChanged: (open) {
             if (conversationOpen == open) return;
             setState(() {
