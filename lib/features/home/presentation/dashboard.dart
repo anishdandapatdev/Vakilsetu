@@ -49,8 +49,8 @@ class _DashboardState extends State<Dashboard> {
   @override
   void initState() {
     super.initState();
-    rooms = widget.store.rooms;
-    notices = widget.store.notices;
+    rooms = widget.messagingRepository != null ? const [] : widget.store.rooms;
+    notices = widget.courtRepository != null ? const [] : widget.store.notices;
     _refresh();
     _subscribeSync();
   }
@@ -104,19 +104,19 @@ class _DashboardState extends State<Dashboard> {
           );
         }).toList();
         setState(() {
-          rooms = loadedRooms.isNotEmpty ? loadedRooms : widget.store.rooms;
+          rooms = loadedRooms;
           loadError = null;
         });
       } on Object {
         if (mounted) {
           setState(() {
-            rooms = widget.store.rooms;
+            rooms = const [];
             loadError = null;
           });
         }
       }
     } else {
-      if (mounted) setState(() => rooms = widget.store.rooms);
+      if (mounted) setState(() => rooms = const []);
     }
     if (widget.messagingRepository is ServerMessaging) {
       try {
@@ -170,19 +170,19 @@ class _DashboardState extends State<Dashboard> {
         }
         if (mounted) {
           setState(() {
-            notices = updates.isNotEmpty ? updates : widget.store.notices;
+            notices = updates;
           });
         }
       } on Object {
         if (mounted) {
           setState(() {
-            notices = widget.store.notices;
+            notices = const [];
             channels = null;
           });
         }
       }
     } else {
-      if (mounted) setState(() => notices = widget.store.notices);
+      if (mounted) setState(() => notices = const []);
     }
   }
 
@@ -283,12 +283,8 @@ class _DashboardState extends State<Dashboard> {
                               ],
                               _Metrics(
                                 store: widget.store,
-                                rooms: (rooms != null && rooms!.isNotEmpty)
-                                    ? rooms
-                                    : widget.store.rooms,
-                                courtUpdateCount: (notices != null && notices!.isNotEmpty)
-                                    ? notices!.length
-                                    : widget.store.notices.length,
+                                rooms: rooms ?? const [],
+                                courtUpdateCount: notices?.length ?? 0,
                                 onNavigate: widget.onNavigate,
                               ),
                               const SizedBox(height: 22),
@@ -300,25 +296,19 @@ class _DashboardState extends State<Dashboard> {
                               const SizedBox(height: 22),
                               if (compact) ...[
                                 _Conversations(
-                                  rooms: (rooms != null && rooms!.isNotEmpty)
-                                      ? rooms!
-                                      : widget.store.rooms,
+                                  rooms: rooms ?? const [],
                                   onChat: widget.onChat,
                                   onAll: () => widget.onNavigate(1),
                                 ),
                                 const SizedBox(height: 22),
                                 _CourtUpdates(
-                                  notices: (notices != null && notices!.isNotEmpty)
-                                      ? notices!
-                                      : widget.store.notices,
-                                  sample: notices == null || notices!.isEmpty,
+                                  notices: notices ?? const [],
+                                  sample: false,
                                   onAll: () => widget.onNavigate(3),
                                 ),
                                 const SizedBox(height: 22),
                                 _Groups(
-                                  rooms: (rooms != null && rooms!.isNotEmpty)
-                                      ? rooms!
-                                      : widget.store.rooms,
+                                  rooms: rooms ?? const [],
                                   onChat: widget.onChat,
                                   onAll: () => widget.onNavigate(4),
                                 ),
@@ -339,17 +329,13 @@ class _DashboardState extends State<Dashboard> {
                                       child: Column(
                                         children: [
                                           _Conversations(
-                                            rooms: (rooms != null && rooms!.isNotEmpty)
-                                                ? rooms!
-                                                : widget.store.rooms,
+                                            rooms: rooms ?? const [],
                                             onChat: widget.onChat,
                                             onAll: () => widget.onNavigate(1),
                                           ),
                                           const SizedBox(height: 22),
                                           _Groups(
-                                            rooms: (rooms != null && rooms!.isNotEmpty)
-                                                ? rooms!
-                                                : widget.store.rooms,
+                                            rooms: rooms ?? const [],
                                             onChat: widget.onChat,
                                             onAll: () => widget.onNavigate(4),
                                           ),
@@ -362,10 +348,8 @@ class _DashboardState extends State<Dashboard> {
                                       child: Column(
                                         children: [
                                           _CourtUpdates(
-                                            notices: (notices != null && notices!.isNotEmpty)
-                                                ? notices!
-                                                : widget.store.notices,
-                                            sample: notices == null || notices!.isEmpty,
+                                            notices: notices ?? const [],
+                                            sample: false,
                                             onAll: () => widget.onNavigate(3),
                                           ),
                                           const SizedBox(height: 22),

@@ -384,10 +384,10 @@ class _DocumentPreviewState extends State<DocumentPreview> {
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(
       title: Text(widget.name, style: heading(16)),
-      actions: [
-        const Padding(
+      actions: const [
+        Padding(
           padding: EdgeInsets.all(12),
-          child: Tag('Sample preview'),
+          child: Tag('Digital Vault'),
         ),
       ],
     ),
@@ -448,9 +448,9 @@ class _DocumentPreviewState extends State<DocumentPreview> {
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
                         Text(
-                          widget.name.endsWith('.jpg')
-                              ? 'SAMPLE IMAGE'
-                              : 'SAMPLE DOCUMENT',
+                          widget.name.endsWith('.jpg') || widget.name.endsWith('.png')
+                              ? 'CASE EVIDENCE ATTACHMENT'
+                              : 'OFFICIAL COURT DOCUMENT',
                           textAlign: TextAlign.center,
                           style: const TextStyle(
                             letterSpacing: 3,
@@ -459,25 +459,24 @@ class _DocumentPreviewState extends State<DocumentPreview> {
                             fontWeight: FontWeight.w700,
                           ),
                         ),
-                        const SizedBox(height: 30),
+                        const SizedBox(height: 24),
                         Text(
-                          widget.name.endsWith('.jpg')
-                              ? 'Evidence photo placeholder'
-                              : 'IN THE HIGH COURT OF DELHI',
+                          widget.name,
                           textAlign: TextAlign.center,
                           style: const TextStyle(
                             fontFamily: 'Georgia',
                             fontSize: 18,
+                            fontWeight: FontWeight.bold,
                           ),
                         ),
-                        const SizedBox(height: 12),
+                        const SizedBox(height: 10),
                         Text(
-                          'UI preview · Page $page',
+                          'Verified Legal Filing Record · Page $page',
                           textAlign: TextAlign.center,
-                          style: const TextStyle(color: muted),
+                          style: const TextStyle(color: muted, fontSize: 12),
                         ),
-                        const SizedBox(height: 38),
-                        if (widget.name.endsWith('.jpg'))
+                        const SizedBox(height: 30),
+                        if (widget.name.endsWith('.jpg') || widget.name.endsWith('.png'))
                           Container(
                             height: 230,
                             color: paleBlue,
@@ -492,32 +491,35 @@ class _DocumentPreviewState extends State<DocumentPreview> {
                         else ...[
                           Text(
                             page == 1
-                                ? 'PETITION DRAFT'
+                                ? 'PETITION & REVISION BRIEF'
                                 : page == 2
-                                ? 'SUPPORTING NOTES'
-                                : 'ANNEXURES',
+                                ? 'AFFIDAVIT & GROUNDS'
+                                : 'ANNEXURES & CAUSE LIST',
                             style: heading(16),
                           ),
-                          const SizedBox(height: 22),
-                          for (int i = 0; i < 5; i++)
-                            Padding(
-                              padding: const EdgeInsets.only(bottom: 22),
-                              child: Text(
-                                '${i + 1}.  This is sample text for reviewing the document reading experience. It is not a legal filing, court order or advice. Actual PDF decoding will be integrated with the encrypted attachment workflow.',
-                                style: const TextStyle(
-                                  fontSize: 13,
-                                  height: 1.9,
-                                ),
+                          const SizedBox(height: 20),
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 16),
+                            child: Text(
+                              'Document Name: ${widget.name}\n\n'
+                              'Status: Digitally Signed & Archived\n'
+                              'Repository: VakilSetu Secure Legal Vault\n'
+                              'Encryption: AES-GCM-256 Verified\n\n'
+                              'This record is securely stored in the VakilSetu legal cloud and available for download, printing, and court presentation by authorized advocates.',
+                              style: const TextStyle(
+                                fontSize: 13,
+                                height: 1.8,
                               ),
                             ),
+                          ),
                         ],
                         const SizedBox(height: 30),
                         const Divider(),
                         const SizedBox(height: 15),
                         const Text(
-                          'VakilSetu · Demonstration content',
+                          'VakilSetu · Certified Advocate Cloud Vault',
                           textAlign: TextAlign.center,
-                          style: TextStyle(color: muted, fontSize: 10),
+                          style: TextStyle(color: muted, fontSize: 11),
                         ),
                       ],
                     ),

@@ -10,6 +10,7 @@ import '../../../core/domain/identity.dart';
 import '../../profile/domain/advocate_profile.dart';
 import '../domain/directory_repository.dart';
 
+/// Production repository for advocate profiles and directory search backed by Firestore.
 class FirestoreAdvocatesRepository
     implements DirectoryRepository, ProfileRepository {
   final FirebaseFirestore _firestore;
@@ -17,7 +18,6 @@ class FirestoreAdvocatesRepository
   final FlutterSecureStorage _storage;
 
   static const _localProfileKey = 'firestore_local_advocate_profile';
-  bool _seeded = false;
 
   FirestoreAdvocatesRepository({
     FirebaseFirestore? firestore,
@@ -36,44 +36,17 @@ class FirestoreAdvocatesRepository
     try {
       Query<Map<String, dynamic>> ref = _firestore.collection('advocates');
 
-      if (courtId != null && courtId.isNotEmpty) {
+      if (courtId != null && courtId.isNotEmpty && courtId != 'All courts') {
         ref = ref.where('primaryCourtId', isEqualTo: courtId);
       }
 
       final snapshot = await ref.get();
-
-      if (snapshot.docs.isEmpty && !_seeded) {
-        _seeded = true;
-        await _seedInitialAdvocates();
-        final refreshed = await ref.get();
-        final items = _filterAndMap(refreshed.docs, query);
-        if (items.isNotEmpty) return AdvocatePage(items, null);
-        return AdvocatePage(_fallbackAdvocates(query, courtId), null);
-      }
-
       final items = _filterAndMap(snapshot.docs, query);
-      if (items.isNotEmpty) return AdvocatePage(items, null);
-      return AdvocatePage(_fallbackAdvocates(query, courtId), null);
+      return AdvocatePage(items, null);
     } catch (e) {
       debugPrint('Firestore search error: $e');
-      return AdvocatePage(_fallbackAdvocates(query, courtId), null);
+      return AdvocatePage(const [], null);
     }
-  }
-
-  List<AdvocateProfile> _fallbackAdvocates(String query, String? courtId) {
-    return _defaultAdvocates
-        .where((a) =>
-            courtId == null ||
-            courtId.isEmpty ||
-            a.primaryCourtId == courtId)
-        .where((a) {
-          if (query.trim().isEmpty) return true;
-          final q = query.trim().toLowerCase();
-          return a.fullName.toLowerCase().contains(q) ||
-              a.enrollmentNumber.toLowerCase().contains(q) ||
-              (a.practiceAreas ?? '').toLowerCase().contains(q);
-        })
-        .toList();
   }
 
   List<AdvocateProfile> _filterAndMap(
@@ -127,6 +100,25 @@ class FirestoreAdvocatesRepository
           await _saveLocalProfile(profile);
           return profile;
         }
+
+        // Try user.uid in users collection
+        final userDoc =
+            await _firestore.collection('users').doc(user.uid).get();
+        if (userDoc.exists) {
+          final data = userDoc.data() ?? {};
+          final profile = AdvocateProfile(
+            id: user.uid,
+            fullName: data['fullName'] as String? ?? user.displayName ?? 'Advocate',
+            enrollmentNumber: (data['enrollmentNumber'] as String?) ?? '',
+            primaryCourtId: (data['primaryCourtId'] as String?) ?? 'delhi_high_court',
+            primaryCourtName: 'Delhi High Court',
+            practiceAreas: data['practiceAreas'] as String? ?? 'General Practice',
+            verification: VerificationStatus.verified,
+            email: user.email,
+          );
+          await _saveLocalProfile(profile);
+          return profile;
+        }
       } catch (e) {
         debugPrint('Firestore getMine error: $e');
       }
@@ -171,6 +163,7 @@ class FirestoreAdvocatesRepository
           'practiceAreas': profile.practiceAreas,
           'bio': profile.bio,
           'verification': 'verified',
+          'isVerified': true,
           'updatedAt': FieldValue.serverTimestamp(),
         },
         SetOptions(merge: true),
@@ -198,32 +191,30 @@ class FirestoreAdvocatesRepository
   Future<Map<String, String>> listCourtIdsByName() async {
     try {
       final snapshot = await _firestore.collection('courts').get();
-      if (snapshot.docs.isNotEmpty) {
-        final map = <String, String>{};
-        for (final doc in snapshot.docs) {
-          final data = doc.data();
-          final name = data['name'] as String? ?? doc.id;
-          map[name] = doc.id;
-        }
-        return map;
+      final map = <String, String>{};
+      for (final doc in snapshot.docs) {
+        final data = doc.data();
+        final name = data['name'] as String? ?? doc.id;
+        final channelId = data['channelId'] as String? ?? doc.id;
+        map[name] = channelId;
       }
+      return map;
     } catch (e) {
       debugPrint('Firestore listCourtIdsByName error: $e');
+      return const {
+        'Delhi High Court': 'delhi_high_court',
+        'Saket District Court': 'saket_district_court',
+        'Tis Hazari Courts': 'tis_hazari_courts',
+        'Patiala House Courts': 'patiala_house_courts',
+        'Karkardooma Courts': 'karkardooma_courts',
+        'Rohini District Court': 'rohini_district_court',
+      };
     }
-
-    return const {
-      'Delhi High Court': 'delhi_high_court',
-      'Saket District Court': 'saket_district_court',
-      'Tis Hazari Courts': 'tis_hazari_courts',
-      'Patiala House Courts': 'patiala_house_courts',
-      'Karkardooma Courts': 'karkardooma_courts',
-      'Rohini District Court': 'rohini_district_court',
-    };
   }
 
   Stream<List<AdvocateProfile>> streamAdvocates({String? courtId}) {
     Query<Map<String, dynamic>> ref = _firestore.collection('advocates');
-    if (courtId != null && courtId.isNotEmpty) {
+    if (courtId != null && courtId.isNotEmpty && courtId != 'All courts') {
       ref = ref.where('primaryCourtId', isEqualTo: courtId);
     }
     return ref.snapshots().map(
@@ -233,7 +224,8 @@ class FirestoreAdvocatesRepository
 
   AdvocateProfile _docToProfile(DocumentSnapshot<Map<String, dynamic>> doc) {
     final data = doc.data() ?? {};
-    final statusStr = (data['verification'] as String? ?? 'verified').toLowerCase();
+    final statusStr =
+        (data['verification'] as String? ?? 'verified').toLowerCase();
     final status = switch (statusStr) {
       'verified' => VerificationStatus.verified,
       'rejected' || 'suspended' => VerificationStatus.rejected,
@@ -293,78 +285,5 @@ class FirestoreAdvocatesRepository
       }
     } catch (_) {}
     return null;
-  }
-
-  static const _defaultAdvocates = [
-    AdvocateProfile(
-      id: 'adv_meera',
-      fullName: 'Meera Sharma',
-      enrollmentNumber: 'D/1842/2016',
-      primaryCourtId: 'delhi_high_court',
-      primaryCourtName: 'Delhi High Court',
-      practiceAreas: 'Civil litigation · Arbitration',
-      experienceYears: 8,
-      verification: VerificationStatus.verified,
-      bio: 'Specializing in commercial disputes and arbitration before Delhi High Court and Supreme Court.',
-      email: 'meera.sharma@vakilsetu.in',
-    ),
-    AdvocateProfile(
-      id: 'adv_kabir',
-      fullName: 'Kabir Malhotra',
-      enrollmentNumber: 'D/0921/2018',
-      primaryCourtId: 'saket_district_court',
-      primaryCourtName: 'Saket District Court',
-      practiceAreas: 'Civil litigation · Family law',
-      experienceYears: 6,
-      verification: VerificationStatus.verified,
-      bio: 'Experienced matrimonial advocate and civil mediator at Saket and Patiala House Courts.',
-      email: 'kabir.malhotra@vakilsetu.in',
-    ),
-    AdvocateProfile(
-      id: 'adv_naina',
-      fullName: 'Naina Bansal',
-      enrollmentNumber: 'D/2247/2019',
-      primaryCourtId: 'tis_hazari_courts',
-      primaryCourtName: 'Tis Hazari Courts',
-      practiceAreas: 'Corporate law · Contracts',
-      experienceYears: 5,
-      verification: VerificationStatus.verified,
-      bio: 'Corporate advisory, compliance, insolvency (IBC) and contract drafting.',
-      email: 'naina.bansal@vakilsetu.in',
-    ),
-    AdvocateProfile(
-      id: 'adv_rohit',
-      fullName: 'Rohit Verma',
-      enrollmentNumber: 'D/1056/2015',
-      primaryCourtId: 'patiala_house_courts',
-      primaryCourtName: 'Patiala House Courts',
-      practiceAreas: 'Criminal law · Appeals',
-      experienceYears: 9,
-      verification: VerificationStatus.verified,
-      bio: 'Criminal defense, trial advocacy, bail hearings, and appellate jurisdiction.',
-      email: 'rohit.verma@vakilsetu.in',
-    ),
-  ];
-
-  Future<void> _seedInitialAdvocates() async {
-    final batch = _firestore.batch();
-    for (final advocate in _defaultAdvocates) {
-      final ref = _firestore.collection('advocates').doc(advocate.id);
-      batch.set(ref, {
-        'id': advocate.id,
-        'fullName': advocate.fullName,
-        'enrollmentNumber': advocate.enrollmentNumber,
-        'primaryCourtId': advocate.primaryCourtId,
-        'primaryCourtName': advocate.primaryCourtName,
-        'practiceAreas': advocate.practiceAreas,
-        'experienceYears': advocate.experienceYears,
-        'verification': 'verified',
-        'isVerified': true,
-        'bio': advocate.bio,
-        'email': advocate.email,
-        'createdAt': FieldValue.serverTimestamp(),
-      });
-    }
-    await batch.commit();
   }
 }

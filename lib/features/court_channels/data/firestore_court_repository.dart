@@ -8,13 +8,13 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../domain/court_repository.dart';
 
+/// Production repository for court channels and official circulars stored in Firestore.
 class FirestoreCourtRepository implements CourtRepository {
   final FirebaseFirestore _firestore;
   final FirebaseAuth _auth;
   final FlutterSecureStorage _storage;
 
   static const _localJoinedKey = 'firestore_joined_court_ids';
-  bool _seeded = false;
 
   FirestoreCourtRepository({
     FirebaseFirestore? firestore,
@@ -27,32 +27,26 @@ class FirestoreCourtRepository implements CourtRepository {
   @override
   Future<List<CourtChannel>> listCourts() async {
     try {
-      final snapshot = await _firestore
+      var snapshot = await _firestore
           .collection('courts')
           .orderBy('order')
           .get();
 
-      if (snapshot.docs.isEmpty && !_seeded) {
-        _seeded = true;
-        await _seedInitialCourts();
-        final refreshed = await _firestore
-            .collection('courts')
-            .orderBy('order')
-            .get();
-        if (refreshed.docs.isNotEmpty) {
-          return refreshed.docs.map(_docToCourtChannel).toList(growable: false);
-        }
-        return _defaultCourts;
-      }
-
       if (snapshot.docs.isNotEmpty) {
         return snapshot.docs.map(_docToCourtChannel).toList(growable: false);
       }
-      return _defaultCourts;
+
+      // Fallback query without orderBy('order') in case the order field is missing on some docs
+      snapshot = await _firestore.collection('courts').get();
+      return snapshot.docs.map(_docToCourtChannel).toList(growable: false);
     } catch (e) {
       debugPrint('Firestore listCourts error: $e');
-      // If Firestore fails or rules restrict, fallback to default courts
-      return _defaultCourts;
+      try {
+        final fallback = await _firestore.collection('courts').get();
+        return fallback.docs.map(_docToCourtChannel).toList(growable: false);
+      } catch (_) {
+        return const [];
+      }
     }
   }
 
@@ -136,25 +130,10 @@ class FirestoreCourtRepository implements CourtRepository {
           .orderBy('createdAt', descending: true)
           .get();
 
-      if (snapshot.docs.isEmpty) {
-        // Check if sample announcements can be added for this channel
-        await _seedAnnouncementsForCourt(channelId);
-        final refreshed = await _firestore
-            .collection('courts')
-            .doc(channelId)
-            .collection('announcements')
-            .orderBy('createdAt', descending: true)
-            .get();
-        if (refreshed.docs.isNotEmpty) {
-          return refreshed.docs.map(_docToAnnouncement).toList(growable: false);
-        }
-        return _defaultAnnouncementsFor(channelId);
-      }
-
       return snapshot.docs.map(_docToAnnouncement).toList(growable: false);
     } catch (e) {
       debugPrint('Firestore announcements error: $e');
-      return _defaultAnnouncementsFor(channelId);
+      return const [];
     }
   }
 
@@ -221,7 +200,7 @@ class FirestoreCourtRepository implements CourtRepository {
         return decoded.map((e) => e.toString()).toSet();
       }
     } catch (_) {}
-    return {'delhi_high_court', 'saket_district_court'};
+    return const {'delhi_high_court'};
   }
 
   Future<void> _saveLocalJoined(Set<String> set) async {
@@ -231,190 +210,5 @@ class FirestoreCourtRepository implements CourtRepository {
         value: jsonEncode(set.toList()),
       );
     } catch (_) {}
-  }
-
-  static const _defaultCourts = [
-    CourtChannel(
-      id: 'delhi_high_court',
-      channelId: 'delhi_high_court',
-      name: 'Delhi High Court',
-      city: 'New Delhi',
-      imageKey: 'assets/images/courts/delhi_high_court_list.png',
-    ),
-    CourtChannel(
-      id: 'saket_district_court',
-      channelId: 'saket_district_court',
-      name: 'Saket District Court',
-      city: 'South Delhi',
-      imageKey: 'assets/images/courts/saket_district_court_list.png',
-    ),
-    CourtChannel(
-      id: 'tis_hazari_courts',
-      channelId: 'tis_hazari_courts',
-      name: 'Tis Hazari Courts',
-      city: 'Central Delhi',
-      imageKey: 'assets/images/courts/tis_hazari_courts.png',
-    ),
-    CourtChannel(
-      id: 'patiala_house_courts',
-      channelId: 'patiala_house_courts',
-      name: 'Patiala House Courts',
-      city: 'New Delhi',
-      imageKey: 'assets/images/courts/patiala_house_courts.png',
-    ),
-    CourtChannel(
-      id: 'karkardooma_courts',
-      channelId: 'karkardooma_courts',
-      name: 'Karkardooma Courts',
-      city: 'East Delhi',
-      imageKey: 'assets/images/courts/delhi_high_court.png',
-    ),
-    CourtChannel(
-      id: 'rohini_district_court',
-      channelId: 'rohini_district_court',
-      name: 'Rohini District Court',
-      city: 'North West Delhi',
-      imageKey: 'assets/images/courts/saket_district_court.png',
-    ),
-  ];
-
-  Future<void> _seedInitialCourts() async {
-    final batch = _firestore.batch();
-    for (int i = 0; i < _defaultCourts.length; i++) {
-      final court = _defaultCourts[i];
-      final docRef = _firestore.collection('courts').doc(court.id);
-      batch.set(docRef, {
-        'id': court.id,
-        'channelId': court.channelId,
-        'name': court.name,
-        'city': court.city,
-        'imageKey': court.imageKey,
-        'order': i + 1,
-        'isVerified': true,
-        'createdAt': FieldValue.serverTimestamp(),
-      });
-    }
-    await batch.commit();
-
-    for (final court in _defaultCourts) {
-      await _seedAnnouncementsForCourt(court.id);
-    }
-  }
-
-  Future<void> _seedAnnouncementsForCourt(String courtId) async {
-    final coll = _firestore
-        .collection('courts')
-        .doc(courtId)
-        .collection('announcements');
-
-    final existing = await coll.limit(1).get();
-    if (existing.docs.isNotEmpty) return;
-
-    if (courtId == 'delhi_high_court') {
-      await coll.add({
-        'title': 'Roster of Sitting Judges - Winter Session',
-        'body':
-            'The revised roster for sitting Division Benches and Single Benches has been notified by the registry. Check cause list for courtroom allocations.',
-        'attachmentKey': 'Roster_Sitting_Judges.pdf',
-        'revision': 1,
-        'createdAt': FieldValue.serverTimestamp(),
-        'authorName': 'High Court Registry',
-      });
-      await coll.add({
-        'title': 'Daily Cause List - Court No. 1',
-        'body':
-            'Urgent admission matters listed before the Hon\'ble Chief Justice Bench. Hybrid hearings begin at 10:30 AM in Court Room 1.',
-        'attachmentKey': 'Cause_list.pdf',
-        'revision': 1,
-        'createdAt': FieldValue.serverTimestamp(),
-        'authorName': 'High Court Registry',
-      });
-    } else if (courtId == 'saket_district_court') {
-      await coll.add({
-        'title': 'E-Filing Portal Maintenance',
-        'body':
-            'The district court e-filing facility will undergo scheduled server updates from 8:00 PM to 11:00 PM this Saturday.',
-        'attachmentKey': null,
-        'revision': 1,
-        'createdAt': FieldValue.serverTimestamp(),
-        'authorName': 'District Court Administration',
-      });
-      await coll.add({
-        'title': 'Court Room Reallocation Notice',
-        'body':
-            'Court No. 304 presided by ADJ-02 is temporarily shifted to 4th Floor Room 412 due to renovation work.',
-        'attachmentKey': 'Relocation_Notice.pdf',
-        'revision': 1,
-        'createdAt': FieldValue.serverTimestamp(),
-        'authorName': 'Principal District Judge Secretariat',
-      });
-    } else {
-      await coll.add({
-        'title': 'National Lok Adalat Schedule',
-        'body':
-            'Special benches for pre-litigation and pending compoundable matters will convene on the upcoming second Saturday.',
-        'attachmentKey': 'Lok_Adalat_Notice.pdf',
-        'revision': 1,
-        'createdAt': FieldValue.serverTimestamp(),
-        'authorName': 'Legal Services Authority',
-      });
-    }
-  }
-  static List<CourtAnnouncement> _defaultAnnouncementsFor(String channelId) {
-    final now = DateTime.now();
-    if (channelId.contains('delhi_high_court')) {
-      return [
-        CourtAnnouncement(
-          id: 'ann_dhc_1',
-          title: 'Roster of Sitting Judges - Winter Session',
-          body:
-              'The revised roster for sitting Division Benches and Single Benches has been notified by the registry. Check cause list for courtroom allocations.',
-          attachmentKey: 'Roster_Sitting_Judges.pdf',
-          revision: 1,
-          createdAt: now.subtract(const Duration(hours: 1)),
-        ),
-        CourtAnnouncement(
-          id: 'ann_dhc_2',
-          title: 'Daily Cause List - Court No. 1',
-          body:
-              'Urgent admission matters listed before the Hon\'ble Chief Justice Bench. Hybrid hearings begin at 10:30 AM in Court Room 1.',
-          attachmentKey: 'Cause_list.pdf',
-          revision: 1,
-          createdAt: now.subtract(const Duration(hours: 2)),
-        ),
-      ];
-    } else if (channelId.contains('saket')) {
-      return [
-        CourtAnnouncement(
-          id: 'ann_saket_1',
-          title: 'E-Filing Portal Maintenance',
-          body:
-              'The district court e-filing facility will undergo scheduled server updates from 8:00 PM to 11:00 PM this Saturday.',
-          attachmentKey: null,
-          revision: 1,
-          createdAt: now.subtract(const Duration(hours: 3)),
-        ),
-        CourtAnnouncement(
-          id: 'ann_saket_2',
-          title: 'Court Room Reallocation Notice',
-          body:
-              'Court No. 304 presided by ADJ-02 is temporarily shifted to 4th Floor Room 412 due to renovation work.',
-          attachmentKey: 'Relocation_Notice.pdf',
-          revision: 1,
-          createdAt: now.subtract(const Duration(hours: 4)),
-        ),
-      ];
-    }
-    return [
-      CourtAnnouncement(
-        id: 'ann_gen_1',
-        title: 'National Lok Adalat Schedule',
-        body:
-            'Special benches for pre-litigation and pending compoundable matters will convene on the upcoming second Saturday.',
-        attachmentKey: 'Lok_Adalat_Notice.pdf',
-        revision: 1,
-        createdAt: now.subtract(const Duration(hours: 5)),
-      ),
-    ];
   }
 }

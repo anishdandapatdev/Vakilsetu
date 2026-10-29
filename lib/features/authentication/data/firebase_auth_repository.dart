@@ -234,8 +234,8 @@ class FirebaseAuthRepository implements AuthRepository {
       user = credential.user;
     }
     return SessionIdentity(
-      userId: user?.uid ?? 'demo_user',
-      deviceId: 'device_demo',
+      userId: user?.uid ?? 'advocate_user',
+      deviceId: 'device_${user?.uid ?? "primary"}',
       verification: VerificationStatus.verified,
       deviceStatus: DeviceStatus.trusted,
     );

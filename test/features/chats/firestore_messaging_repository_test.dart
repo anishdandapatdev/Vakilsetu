@@ -5,56 +5,25 @@ import 'package:vakilsetu/features/chats/domain/server_messaging.dart';
 
 void main() {
   group('FirestoreMessagingRepository Unit Tests', () {
-    test('normalizeAdvocateId handles demo and prefixed advocate ids', () {
-      expect(FirestoreMessagingRepository.normalizeAdvocateId('meera'), equals('adv_meera'));
-      expect(FirestoreMessagingRepository.normalizeAdvocateId('kabir'), equals('adv_kabir'));
-      expect(FirestoreMessagingRepository.normalizeAdvocateId('naina'), equals('adv_naina'));
-      expect(FirestoreMessagingRepository.normalizeAdvocateId('rohit'), equals('adv_rohit'));
-      expect(FirestoreMessagingRepository.normalizeAdvocateId('adv_meera'), equals('adv_meera'));
-      expect(FirestoreMessagingRepository.normalizeAdvocateId('custom_id_123'), equals('custom_id_123'));
-    });
+    test('ConversationSummary models advocate-to-advocate consultation correctly', () {
+      final now = DateTime.now();
+      final directConv = ConversationSummary(
+        id: 'conv_adv_direct_01',
+        kind: ConversationKind.direct,
+        title: 'Adv. Anish Dandapat',
+        category: 'Delhi High Court',
+        membershipEpoch: 1,
+        createdAt: now.subtract(const Duration(hours: 1)),
+        lastMessageAt: now.subtract(const Duration(minutes: 5)),
+        lastMessagePreview: 'Good morning Counsel, cause list review ready.',
+        unreadCount: 1,
+      );
 
-    test('fallback conversations provide expected initial contacts and titles', () async {
-      // Testing the static fallback and messaging domain models
-      final fallbacks = [
-        ConversationSummary(
-          id: '11111111-2222-3333-4444-555555555551',
-          kind: ConversationKind.direct,
-          title: 'Meera Sharma',
-          membershipEpoch: 1,
-          createdAt: DateTime.now().subtract(const Duration(hours: 3)),
-          lastMessageAt: DateTime.now().subtract(const Duration(minutes: 15)),
-          lastMessagePreview: 'Let me know once you go through the clause 14 provisions.',
-          unreadCount: 1,
-        ),
-        ConversationSummary(
-          id: '11111111-2222-3333-4444-555555555552',
-          kind: ConversationKind.direct,
-          title: 'Kabir Malhotra',
-          membershipEpoch: 1,
-          createdAt: DateTime.now().subtract(const Duration(days: 1)),
-          lastMessageAt: DateTime.now().subtract(const Duration(minutes: 45)),
-          lastMessagePreview: 'Saket Court bench hearing is scheduled for tomorrow 10:30 AM.',
-          unreadCount: 0,
-        ),
-        ConversationSummary(
-          id: '11111111-2222-3333-4444-555555555553',
-          kind: ConversationKind.privateGroup,
-          title: 'Delhi High Court Bar Association',
-          membershipEpoch: 1,
-          createdAt: DateTime.now().subtract(const Duration(days: 3)),
-          lastMessageAt: DateTime.now().subtract(const Duration(hours: 2)),
-          lastMessagePreview: 'The bar association meeting on digital filings is at 4 PM in library hall.',
-          unreadCount: 2,
-        ),
-      ];
-
-      expect(fallbacks.length, equals(3));
-      expect(fallbacks[0].title, equals('Meera Sharma'));
-      expect(fallbacks[0].kind, equals(ConversationKind.direct));
-      expect(fallbacks[1].title, equals('Kabir Malhotra'));
-      expect(fallbacks[2].kind, equals(ConversationKind.privateGroup));
-      expect(fallbacks[2].unreadCount, equals(2));
+      expect(directConv.id, equals('conv_adv_direct_01'));
+      expect(directConv.kind, equals(ConversationKind.direct));
+      expect(directConv.title, equals('Adv. Anish Dandapat'));
+      expect(directConv.category, equals('Delhi High Court'));
+      expect(directConv.unreadCount, equals(1));
     });
 
     test('ConversationSummary ordering by lastMessageAt descending', () {

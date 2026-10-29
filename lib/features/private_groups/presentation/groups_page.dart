@@ -186,39 +186,39 @@ class _GroupsPageState extends State<GroupsPage> {
   }
 
   bool _isJoined(DemoRoom group) {
-    if (widget.store.isGroupJoined(group)) return true;
     if (serverGroups != null &&
         serverGroups!.any((g) => g.id == group.id || g.name == group.name)) {
       return true;
     }
-    return widget.store.rooms.any((r) => r.group && (r.id == group.id || r.name == group.name));
+    if (widget.messagingRepository != null) return false;
+    return widget.store.isGroupJoined(group);
   }
 
   List<DemoRoom> _getAllCatalog() {
     final Map<String, DemoRoom> catalog = {};
 
-    // 1. From store available groups
-    for (final g in widget.store.availableGroups) {
-      catalog[g.id] = g;
-    }
-
-    // 2. From server discoverable groups
+    // 1. From server discoverable groups
     if (discoverableServerGroups != null) {
       for (final g in discoverableServerGroups!) {
         catalog[g.id] = g;
       }
     }
 
-    // 3. From server joined groups
+    // 2. From server joined groups
     if (serverGroups != null) {
       for (final g in serverGroups!) {
         catalog[g.id] = g;
       }
     }
 
-    // 4. From local active rooms
-    for (final r in widget.store.rooms.where((r) => r.group)) {
-      catalog[r.id] = r;
+    // Only fallback if no backend messaging repository is connected
+    if (widget.messagingRepository == null) {
+      for (final g in widget.store.availableGroups) {
+        catalog[g.id] = g;
+      }
+      for (final r in widget.store.rooms.where((r) => r.group)) {
+        catalog[r.id] = r;
+      }
     }
 
     return catalog.values.toList();

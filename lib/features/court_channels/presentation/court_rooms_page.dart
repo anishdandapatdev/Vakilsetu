@@ -119,10 +119,7 @@ class _CourtRoomsPageState extends State<CourtRoomsPage> {
 
   bool _isJoined(CourtChannel channel) {
     final cId = _canonicalId(channel.id.isNotEmpty ? channel.id : channel.name);
-    return apiJoined.contains(channel.id) ||
-        apiJoined.contains(cId) ||
-        widget.store.joined.contains(channel.name) ||
-        widget.store.joined.contains(cId);
+    return apiJoined.contains(channel.id) || apiJoined.contains(cId);
   }
 
   Future<void> _toggleJoined(CourtChannel channel) async {
@@ -548,14 +545,9 @@ class _CourtRoomsPageState extends State<CourtRoomsPage> {
 
   Widget _channelDetails() {
     final channel = selectedChannel!;
-    final localNotices = widget.store.notices
-        .where((n) => n.court == channel.name)
-        .toList();
     final notices = <DemoNotice>[
       for (final notice in apiNotices ?? const <CourtAnnouncement>[])
         DemoNotice(channel.name, notice.title ?? 'Official court update', notice.body),
-      if (apiNotices == null || apiNotices!.isEmpty)
-        ...localNotices,
     ];
 
     return ColoredBox(
